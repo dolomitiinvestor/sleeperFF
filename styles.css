@@ -1,0 +1,334 @@
+:root {
+  --bg: #0f172a;
+  --bg-card: #1a2438;
+  --bg-card-alt: #202c47;
+  --border: #2b3854;
+  --text: #e7ecf7;
+  --text-muted: #93a1c0;
+  --accent: #4ade80;
+  --red: #f87171;
+  --red-bg: #3a1e22;
+  --orange: #fbbf24;
+  --orange-bg: #3a2f14;
+  --blue: #60a5fa;
+  --blue-bg: #17233d;
+  --green: #34d399;
+  --green-bg: #142f26;
+  --radius: 12px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-top: env(safe-area-inset-top);
+}
+
+.app-header {
+  padding: 20px 16px 14px;
+  background: linear-gradient(180deg, #142038 0%, #1c2b4a 100%);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* The header bar is always a dark navy gradient regardless of theme, so its
+   text stays a fixed light color rather than following --text/--text-muted. */
+.app-header h1 {
+  margin: 0 0 2px;
+  font-size: 1.35rem;
+  color: #f3f5fb;
+}
+
+.tagline {
+  margin: 0 0 14px;
+  color: #a9b4d0;
+  font-size: 0.85rem;
+}
+
+.load-form {
+  display: flex;
+  gap: 8px;
+}
+
+#username-input {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 16px; /* prevents iOS zoom on focus */
+}
+
+#username-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+#load-btn, .link-btn {
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: none;
+  background: var(--accent);
+  color: #06210f;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+#load-btn:disabled {
+  opacity: 0.6;
+}
+
+.status-line {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: #a9b4d0;
+}
+
+.status-line.error {
+  color: #fca5a5;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+main {
+  padding: 16px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.empty-state {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 40px 12px;
+  font-size: 0.95rem;
+}
+
+.empty-state .hint {
+  font-size: 0.8rem;
+  margin-top: 10px;
+  opacity: 0.8;
+}
+
+.season-banner {
+  background: var(--blue-bg);
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
+.leagues-container {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.league-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.league-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--bg-card-alt);
+}
+
+.league-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--border);
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.league-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.league-title h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.league-title .sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.record-pill {
+  font-size: 0.78rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.alerts {
+  padding: 10px 16px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alert {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.alert .icon { font-size: 1.05rem; }
+
+.alert.sev-high { background: var(--red-bg); border: 1px solid var(--red); }
+.alert.sev-mid { background: var(--orange-bg); border: 1px solid var(--orange); }
+.alert.sev-info { background: var(--blue-bg); border: 1px solid var(--blue); }
+
+.alert b { display: block; margin-bottom: 2px; }
+
+.alert .sub-list {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.alert .sub-list span.cand {
+  display: inline-block;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 7px;
+  margin: 2px 4px 0 0;
+}
+
+.no-alerts {
+  padding: 10px 16px;
+  color: var(--green);
+  font-size: 0.85rem;
+}
+
+.roster-section {
+  padding: 4px 16px 16px;
+}
+
+.roster-section h3 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 14px 0 6px;
+}
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.87rem;
+}
+
+.player-row:last-child { border-bottom: none; }
+
+.slot-tag {
+  width: 40px;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.player-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.badge.bye { background: var(--red-bg); color: var(--red); }
+.badge.out { background: var(--red-bg); color: var(--red); }
+.badge.quest { background: var(--orange-bg); color: var(--orange); }
+.badge.thu { background: var(--blue-bg); color: var(--blue); }
+
+.app-footer {
+  text-align: center;
+  padding: 24px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 8px 14px;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4f6fb;
+    --bg-card: #ffffff;
+    --bg-card-alt: #eef1f9;
+    --border: #dde3f0;
+    --text: #101828;
+    --text-muted: #5b6478;
+    --red-bg: #fde8e8;
+    --orange-bg: #fdf3d8;
+    --blue-bg: #e6f0fe;
+    --green-bg: #e3f9ef;
+  }
+}

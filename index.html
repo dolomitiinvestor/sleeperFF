@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Sleeper Lineup Watch</title>
+<meta name="description" content="Pull all your Sleeper fantasy football teams by username and get bye week, injury, and Thursday-lock lineup reminders." />
+
+<!-- iPhone "Add to Home Screen" support -->
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Sleeper Lineup" />
+<meta name="theme-color" content="#0f172a" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/icon-192.png" />
+
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="app-header">
+  <h1>🏈 Sleeper Lineup Watch</h1>
+  <p class="tagline">All your leagues. Byes, injuries, and Thursday locks in one glance.</p>
+
+  <form id="load-form" class="load-form" autocomplete="off">
+    <label for="username-input" class="sr-only">Sleeper username</label>
+    <input id="username-input" name="username" type="text" placeholder="Sleeper username" required inputmode="text" autocapitalize="none" autocorrect="off" spellcheck="false" />
+    <button type="submit" id="load-btn">Load My Teams</button>
+  </form>
+
+  <div id="status-line" class="status-line" hidden></div>
+</header>
+
+<main id="app-main">
+  <div id="empty-state" class="empty-state">
+    <p>Enter your Sleeper username above to pull every league you're in this season.</p>
+    <p class="hint">Read-only &mdash; this uses Sleeper's public API. No password, no login, nothing leaves your phone except normal requests to sleeper.app and espn.com.</p>
+  </div>
+
+  <div id="season-banner" class="season-banner" hidden></div>
+
+  <div id="leagues-container" class="leagues-container"></div>
+</main>
+
+<footer class="app-footer">
+  <button id="refresh-players-btn" class="link-btn" hidden>Force-refresh player data</button>
+  <span id="players-updated" class="muted"></span>
+</footer>
+
+<script src="byeWeeks.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
