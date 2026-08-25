@@ -253,9 +253,9 @@ main {
 
 .player-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 7px 0;
+  padding: 8px 0;
   border-bottom: 1px solid var(--border);
   font-size: 0.87rem;
 }
@@ -268,14 +268,29 @@ main {
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--text-muted);
+  padding-top: 2px;
 }
 
-.player-name {
+.player-info {
   flex: 1;
   min-width: 0;
+}
+
+.player-name-line {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.player-badges-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.player-badges-line:empty {
+  display: none;
 }
 
 .player-meta {
@@ -295,6 +310,28 @@ main {
 .badge.out { background: var(--red-bg); color: var(--red); }
 .badge.quest { background: var(--orange-bg); color: var(--orange); }
 .badge.thu { background: var(--blue-bg); color: var(--blue); }
+
+.badge.game {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Thursday games get the same blue emphasis as the old standalone THU badge —
+   that's the slot that locks early, worth catching the eye. */
+.badge.game.thu {
+  background: var(--blue-bg);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.badge.unknown {
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  font-weight: 500;
+}
 
 .app-footer {
   text-align: center;

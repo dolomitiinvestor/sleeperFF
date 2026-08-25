@@ -115,14 +115,14 @@ async function run(username, opts = {}) {
     const isRegularSeason = state.season_type === 'regular' || state.season_type === 'post';
     const week = state.week || state.leg;
 
-    let thursdayTeams = null;
+    let schedule = null;
     if (isRegularSeason) {
-      setStatus('Checking this week\'s Thursday game…');
-      thursdayTeams = await getThursdayTeams(state.season, week).catch(() => null);
+      setStatus('Checking this week\'s game schedule…');
+      schedule = await getWeekSchedule(state.season, week).catch(() => null);
     }
 
     renderSeasonBanner(state, isRegularSeason);
-    renderLeagues(leagueData, playersById, week, isRegularSeason, thursdayTeams);
+    renderLeagues(leagueData, playersById, week, isRegularSeason, schedule);
 
     setStatus(`Loaded ${leagueData.filter(l => l.myRoster).length} of ${leagueData.length} league${leagueData.length === 1 ? '' : 's'} for ${user.display_name || username}.`);
     updatePlayersFooter();
@@ -190,26 +190,55 @@ function updatePlayersFooter() {
   }
 }
 
-// ---------- Thursday game lookup (ESPN scoreboard, best-effort) ----------
+// ---------- Weekly game schedule lookup (ESPN scoreboard, best-effort) ----------
+//
+// Returns a Map of normalized team abbreviation -> game info, built straight
+// from each event's UTC kickoff timestamp. Everything (weekday, date, and
+// clock time) is derived by formatting that single UTC instant in the
+// America/New_York timezone, so DST (EST vs EDT) and international games
+// (London/Munich/São Paulo kickoffs) all convert correctly automatically —
+// there's no separate "away timezone" logic to get wrong.
+const ET_WEEKDAY_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' });
+const ET_DATE_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric' });
+const ET_TIME_FMT = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
 
-async function getThursdayTeams(season, week) {
+function formatGameMeta(iso) {
+  const d = new Date(iso);
+  return {
+    weekday: ET_WEEKDAY_FMT.format(d), // e.g. "Thu"
+    monthDay: ET_DATE_FMT.format(d),   // e.g. "10/2"
+    timeText: ET_TIME_FMT.format(d),   // e.g. "8:20 PM EDT" — Intl picks EST/EDT correctly for the date
+  };
+}
+
+async function getWeekSchedule(season, week) {
   const url = `${ESPN_SCOREBOARD}?week=${week}&seasontype=2&year=${season}`;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = await res.json();
-  const thursdayTeams = new Set();
+  const schedule = new Map();
   for (const event of data.events || []) {
-    const d = new Date(event.date);
-    const weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' }).format(d);
-    if (weekday !== 'Thu') continue;
+    const meta = formatGameMeta(event.date);
     for (const comp of event.competitions || []) {
-      for (const c of comp.competitors || []) {
+      const competitors = comp.competitors || [];
+      for (const c of competitors) {
         const abbr = c.team && c.team.abbreviation;
-        if (abbr) thursdayTeams.add(normalizeTeam(abbr));
+        if (!abbr) continue;
+        const opponent = competitors.find((o) => o !== c);
+        schedule.set(normalizeTeam(abbr), {
+          ...meta,
+          opponent: opponent && opponent.team ? normalizeTeam(opponent.team.abbreviation) : null,
+          homeAway: c.homeAway || null,
+        });
       }
     }
   }
-  return thursdayTeams;
+  return schedule;
+}
+
+function isThursdayTeam(schedule, team) {
+  const g = schedule && schedule.get(normalizeTeam(team));
+  return !!g && g.weekday === 'Thu';
 }
 
 // ---------- Rendering ----------
@@ -223,7 +252,7 @@ function renderSeasonBanner(state, isRegularSeason) {
   }
 }
 
-function renderLeagues(leagueData, playersById, week, isRegularSeason, thursdayTeams) {
+function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule) {
   els.leaguesContainer.innerHTML = '';
 
   for (const { league, users, myRoster } of leagueData) {
@@ -248,7 +277,7 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, thursdayT
     const recordText = `${record.wins ?? 0}-${record.losses ?? 0}${record.ties ? `-${record.ties}` : ''}`;
 
     const alerts = isRegularSeason
-      ? analyzeRoster(league, myRoster, playersById, week, thursdayTeams)
+      ? analyzeRoster(league, myRoster, playersById, week, schedule)
       : { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [] };
 
     card.innerHTML = `
@@ -263,7 +292,7 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, thursdayT
     `;
 
     card.appendChild(renderAlerts(alerts));
-    card.appendChild(renderRosterList(league, myRoster, playersById, week, thursdayTeams));
+    card.appendChild(renderRosterList(league, myRoster, playersById, week, schedule));
     els.leaguesContainer.appendChild(card);
   }
 }
@@ -290,7 +319,8 @@ function renderAlerts(alerts) {
   }
   for (const item of alerts.thursdayFlags) {
     const where = item.isBench ? 'on your bench' : `starting at ${item.slot}`;
-    wrap.appendChild(alertRow('sev-info', '📅', `${item.player.full_name} plays Thursday Night — ${where}. Set your final lineup before kickoff, that slot locks early.`, null));
+    const when = item.game ? ` (${item.game.monthDay}, ${item.game.timeText})` : '';
+    wrap.appendChild(alertRow('sev-info', '📅', `${item.player.full_name} plays Thursday Night${when} — ${where}. Set your final lineup before kickoff, that slot locks early.`, null));
   }
 
   return wrap;
@@ -313,7 +343,7 @@ function alertRow(sevClass, icon, text, candidates) {
   return row;
 }
 
-function renderRosterList(league, roster, playersById, week, thursdayTeams) {
+function renderRosterList(league, roster, playersById, week, schedule) {
   const wrap = document.createElement('div');
   wrap.className = 'roster-section';
 
@@ -326,20 +356,20 @@ function renderRosterList(league, roster, playersById, week, thursdayTeams) {
   wrap.appendChild(sectionHeading('Starters'));
   for (let i = 0; i < startingSlotTypes.length; i++) {
     const pid = starters[i];
-    wrap.appendChild(playerRow(startingSlotTypes[i], pid ? playersById[pid] : null, week, thursdayTeams));
+    wrap.appendChild(playerRow(startingSlotTypes[i], pid ? playersById[pid] : null, week, schedule));
   }
 
   if (benchIds.length) {
     wrap.appendChild(sectionHeading('Bench'));
     for (const pid of benchIds) {
-      wrap.appendChild(playerRow('BN', playersById[pid], week, thursdayTeams));
+      wrap.appendChild(playerRow('BN', playersById[pid], week, schedule));
     }
   }
 
   if (roster.reserve && roster.reserve.length) {
     wrap.appendChild(sectionHeading('IR'));
     for (const pid of roster.reserve) {
-      wrap.appendChild(playerRow('IR', playersById[pid], week, thursdayTeams));
+      wrap.appendChild(playerRow('IR', playersById[pid], week, schedule));
     }
   }
 
@@ -352,7 +382,7 @@ function sectionHeading(text) {
   return h;
 }
 
-function playerRow(slot, player, week, thursdayTeams) {
+function playerRow(slot, player, week, schedule) {
   const row = document.createElement('div');
   row.className = 'player-row';
 
@@ -362,19 +392,31 @@ function playerRow(slot, player, week, thursdayTeams) {
   }
 
   const bye = getByeWeek(player.team);
-  const onBye = bye && week && bye === week;
-  const onThursday = thursdayTeams && thursdayTeams.has(normalizeTeam(player.team));
+  const onBye = !!(bye && week && bye === week);
+  const game = !onBye && schedule ? schedule.get(normalizeTeam(player.team)) : null;
+  const onThursday = game && game.weekday === 'Thu';
 
-  let badges = '';
-  if (onBye) badges += `<span class="badge bye">BYE</span>`;
-  if (player.injury_status === 'Questionable') badges += `<span class="badge quest">Q</span>`;
-  else if (BAD_INJURY_STATUSES.has(player.injury_status)) badges += `<span class="badge out">${escapeHtml(player.injury_status)}</span>`;
-  if (onThursday) badges += `<span class="badge thu">THU</span>`;
+  let gameChip = '';
+  if (onBye) {
+    gameChip = `<span class="badge bye">BYE</span>`;
+  } else if (game) {
+    gameChip = `<span class="badge game${onThursday ? ' thu' : ''}">${escapeHtml(game.weekday)} ${escapeHtml(game.monthDay)} · ${escapeHtml(game.timeText)}</span>`;
+  } else if (schedule) {
+    // schedule loaded successfully but this team has no game this week (bye
+    // not in our static table, postponed, etc.) — say so instead of guessing
+    gameChip = `<span class="badge unknown">No game found</span>`;
+  }
+
+  let statusBadges = '';
+  if (player.injury_status === 'Questionable') statusBadges += `<span class="badge quest">Q</span>`;
+  else if (BAD_INJURY_STATUSES.has(player.injury_status)) statusBadges += `<span class="badge out">${escapeHtml(player.injury_status)}</span>`;
 
   row.innerHTML = `
     <span class="slot-tag">${slot}</span>
-    <span class="player-name">${escapeHtml(player.full_name)} <span class="player-meta">${player.position || ''}${player.team ? ' · ' + player.team : ' · FA'}</span></span>
-    ${badges}
+    <div class="player-info">
+      <div class="player-name-line">${escapeHtml(player.full_name)} <span class="player-meta">${player.position || ''}${player.team ? ' · ' + player.team : ' · FA'}</span></div>
+      <div class="player-badges-line">${gameChip}${statusBadges}</div>
+    </div>
   `;
   return row;
 }
@@ -385,7 +427,7 @@ function escapeHtml(str) {
 
 // ---------- Analysis ----------
 
-function analyzeRoster(league, roster, playersById, week, thursdayTeams) {
+function analyzeRoster(league, roster, playersById, week, schedule) {
   const startingSlotTypes = (league.roster_positions || []).filter((p) => p !== 'BN');
   const starters = roster.starters || [];
   const reserve = new Set(roster.reserve || []);
@@ -405,12 +447,12 @@ function analyzeRoster(league, roster, playersById, week, thursdayTeams) {
     const onBye = !!(bye && bye === week);
     const injuryBad = BAD_INJURY_STATUSES.has(p.injury_status);
     const injuryCaution = p.injury_status === 'Questionable';
-    const onThursday = thursdayTeams && thursdayTeams.has(normalizeTeam(p.team));
+    const onThursday = isThursdayTeam(schedule, p.team);
 
     if (onBye) alerts.byeStarters.push({ slot, player: p });
     if (injuryBad) alerts.injuryStarters.push({ slot, player: p, severity: 'high' });
     else if (injuryCaution) alerts.injuryStarters.push({ slot, player: p, severity: 'low' });
-    if (onThursday) alerts.thursdayFlags.push({ slot, player: p, isBench: false });
+    if (onThursday) alerts.thursdayFlags.push({ slot, player: p, isBench: false, game: schedule.get(normalizeTeam(p.team)) });
 
     if (onBye || injuryBad) {
       const eligiblePositions = FLEX_ELIGIBILITY[slot] || [slot];
@@ -436,7 +478,7 @@ function analyzeRoster(league, roster, playersById, week, thursdayTeams) {
     if (!p) continue;
     const bye = getByeWeek(p.team);
     if (bye && bye === week) alerts.byeBench.push({ player: p });
-    if (thursdayTeams && thursdayTeams.has(normalizeTeam(p.team))) alerts.thursdayFlags.push({ slot: 'BN', player: p, isBench: true });
+    if (isThursdayTeam(schedule, p.team)) alerts.thursdayFlags.push({ slot: 'BN', player: p, isBench: true, game: schedule.get(normalizeTeam(p.team)) });
   }
 
   return alerts;
