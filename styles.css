@@ -112,7 +112,7 @@ body {
 
 main {
   padding: 16px;
-  max-width: 720px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
@@ -140,8 +140,9 @@ main {
 }
 
 .leagues-container {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  align-items: start;
   gap: 18px;
 }
 
@@ -150,6 +151,7 @@ main {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
+  min-width: 0;
 }
 
 .league-card-header {
