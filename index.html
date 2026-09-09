@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" />
 
-<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="styles.css?v=1" />
 </head>
 <body>
 <header class="app-header">
@@ -29,7 +29,15 @@
   </form>
 
   <div id="status-line" class="status-line" hidden></div>
+  <div id="update-banner" class="update-banner" hidden>
+    A new version is available. <button id="update-reload-btn" type="button">Refresh</button>
+  </div>
 </header>
+
+<nav id="tab-nav" class="tab-nav" hidden>
+  <button type="button" class="tab-btn active" data-tab="leagues-tab">Leagues</button>
+  <button type="button" class="tab-btn" data-tab="viewing-tab">Viewing</button>
+</nav>
 
 <main id="app-main">
   <div id="empty-state" class="empty-state">
@@ -39,7 +47,13 @@
 
   <div id="season-banner" class="season-banner" hidden></div>
 
-  <div id="leagues-container" class="leagues-container"></div>
+  <div id="leagues-tab" class="tab-panel">
+    <div id="leagues-container" class="leagues-container"></div>
+  </div>
+
+  <div id="viewing-tab" class="tab-panel" hidden>
+    <div id="viewing-container" class="viewing-container"></div>
+  </div>
 </main>
 
 <footer class="app-footer">
@@ -47,7 +61,7 @@
   <span id="players-updated" class="muted"></span>
 </footer>
 
-<script src="byeWeeks.js"></script>
-<script src="app.js"></script>
+<script src="byeWeeks.js?v=1"></script>
+<script src="app.js?v=1"></script>
 </body>
 </html>

@@ -8,6 +8,11 @@ by username and flags:
 - ⚠️ Starters who are **Questionable**
 - 📅 Anyone (starter or bench) who **plays Thursday Night**, so you don't forget to lock in that slot before kickoff
 
+There's also a **Viewing** tab: real NFL game times/teams/venues for the week,
+grouped so you can see which games have your starters in them, how many
+points you need from that league's matchup to win, and each player's
+projected points.
+
 It's 100% static — no server, no login, no build step. It talks directly to
 Sleeper's public read-only API and ESPN's public scoreboard from your browser.
 Nothing you enter is sent anywhere except those two APIs, and the only thing
@@ -62,6 +67,20 @@ push. Nothing else needs to change.
   eligible for the specific slot (e.g. a `WRRB_FLEX` only gets WR/RB
   suggestions), and skip anyone else who is also on a bye or already
   Out/Doubtful/IR.
-- There is no projected-points data source wired in (that would require a
-  paid API), so bench suggestions are eligibility-based, not ranked by
+- Bench-swap suggestions are still eligibility-based, not ranked by
   projection — double check matchups before swapping.
+- **Projections** (Viewing tab): `api.sleeper.app/projections/nfl/...`, an
+  unofficial but public Sleeper endpoint. Raw per-stat projections are
+  combined with each league's own `scoring_settings` so the number reflects
+  that league's exact scoring, not a generic PPR/standard guess.
+- **Matchup score / points needed** (Viewing tab): Sleeper's
+  `/league/{id}/matchups/{week}` endpoint, which is the same live score
+  Sleeper's own site shows.
+- **Staying up to date**: the app checks a small `version.json` (bypassing
+  the cache) on load, when you switch back to the tab, and every 10 minutes.
+  If it's newer than the version you're running, a "Refresh" banner shows up
+  — this matters most for the iPhone home-screen install, which can
+  otherwise launch from a stale cached copy. When you push a change to
+  `app.js`/`index.html`/etc., bump the version in both `version.json` and
+  the `APP_VERSION` constant at the top of `app.js` so returning users get
+  prompted.
