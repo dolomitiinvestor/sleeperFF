@@ -3,10 +3,9 @@
 A tiny static webapp that pulls **every Sleeper fantasy football team you're on**
 by username and flags:
 
-- 🛌 Starters who are on a **bye** this week
-- 🚑 Starters who are **Out / Doubtful / IR** (with healthy bench replacement suggestions for that slot)
-- ⚠️ Starters who are **Questionable**
-- 📅 Anyone (starter or bench) who **plays Thursday Night**, so you don't forget to lock in that slot before kickoff
+- Starters who are on a **bye** this week
+- Starters who are **Out / IR / etc.** (red), **Doubtful** (orange), or **Questionable** (yellow) — with healthy bench replacement suggestions for Out/IR-level designations
+- Starters in a **flex slot** who play Thursday Night, and bench players who play Thursday Night when a starter carries an injury designation or the bench player is projected to outscore your lowest starter — so you don't forget to lock in that slot before kickoff
 
 There's also a **Viewing** tab: real NFL game times/teams/venues for the week,
 grouped so you can see which games have your starters in them, how many
@@ -40,8 +39,9 @@ No secrets, no API keys, nothing else to configure.
 
 Type your **Sleeper username** (not display name / not email) and tap **Load
 My Teams**. It'll pull every league you're in for the current season, show
-your roster in each one, and surface the alerts above. Tap **Load My Teams**
-again any time to refresh.
+your roster in each one, and surface the alerts above. Your username is saved
+in the browser, so the app reloads your teams automatically on future visits
+— tap **Load My Teams** again any time to force a refresh.
 
 The player database (names, positions, injury status) is a ~5–6&nbsp;MB
 download from Sleeper. The app caches it in your browser for about 20 hours
