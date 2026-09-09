@@ -1,6 +1,6 @@
 // Sleeper Lineup Watch — client-side only. Everything below runs in the browser.
 
-const APP_VERSION = '1';
+const APP_VERSION = '2';
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1';
 const SLEEPER_PROJECTIONS_BASE = 'https://api.sleeper.app/projections/nfl';
@@ -677,8 +677,13 @@ function renderViewing(leagueData, playersById, week, isRegularSeason, schedule,
     return;
   }
 
-  const byGame = new Map(); // event id -> { game, entries }
-  for (const g of schedule.games) byGame.set(g.id, { game: g, entries: [] });
+  // Only games that haven't finished yet — once a game is final there's
+  // nothing left to watch for.
+  const byGame = new Map(); // event id -> { game, players: Map(pid -> { playerName, team, leagues }) }
+  for (const g of schedule.games) {
+    if (g.state === 'post') continue;
+    byGame.set(g.id, { game: g, players: new Map() });
+  }
 
   for (const { league, myRoster, matchup } of leagueData) {
     if (!myRoster) continue;
@@ -695,96 +700,73 @@ function renderViewing(leagueData, playersById, week, isRegularSeason, schedule,
       if (!gameInfo || gameInfo.eventId == null) continue; // bye week or unknown
 
       const bucket = byGame.get(gameInfo.eventId);
-      if (!bucket) continue;
+      if (!bucket) continue; // game already final, or unknown
 
       const projStats = projectionsById ? projectionsById[pid] : null;
       const projPts = projStats ? computeFantasyPoints(projStats, league.scoring_settings) : null;
 
-      bucket.entries.push({
-        leagueId: league.league_id,
+      if (!bucket.players.has(pid)) {
+        bucket.players.set(pid, { playerName: player.full_name, team: normalizeTeam(player.team), leagues: [] });
+      }
+      bucket.players.get(pid).leagues.push({
         leagueName: league.name,
-        playerName: player.full_name,
-        slot: startingSlotTypes[i],
-        team: normalizeTeam(player.team),
         projPts,
-        final: gameInfo.state === 'post',
         pointsNeeded,
         myPoints: matchup ? matchup.myPoints : null,
         oppPoints: matchup ? matchup.oppPoints : null,
-        oppTeamName: matchup ? matchup.oppTeamName : null,
       });
     }
   }
 
-  const gamesWithEntries = [...byGame.values()].filter((b) => b.entries.length > 0);
+  const gamesWithPlayers = [...byGame.values()].filter((b) => b.players.size > 0);
 
-  if (!gamesWithEntries.length) {
-    container.innerHTML = `<div class="empty-state">None of your starters are in a game this week.</div>`;
+  if (!gamesWithPlayers.length) {
+    container.innerHTML = `<div class="empty-state">None of your starters are in an upcoming game this week.</div>`;
     return;
   }
 
-  for (const { game, entries } of gamesWithEntries) {
-    container.appendChild(renderGameCard(game, entries));
+  for (const { game, players } of gamesWithPlayers) {
+    container.appendChild(renderGameCard(game, players));
   }
 }
 
-function renderGameCard(game, entries) {
+function renderGameCard(game, players) {
   const card = document.createElement('section');
   card.className = 'game-card';
 
-  const liveScore = game.state !== 'pre' && game.away.score != null && game.home.score != null
-    ? ` &middot; ${escapeHtml(game.away.abbr)} ${game.away.score}-${game.home.score} ${escapeHtml(game.home.abbr)}`
+  const liveScore = game.state === 'in' && game.away.score != null && game.home.score != null
+    ? ` &middot; ${game.away.score}-${game.home.score}`
     : '';
 
   card.innerHTML = `
     <div class="game-card-header">
-      <div class="game-teams">${escapeHtml(game.away.abbr)} @ ${escapeHtml(game.home.abbr)}</div>
-      <div class="game-meta">${escapeHtml(game.weekday)} ${escapeHtml(game.monthDay)} &middot; ${escapeHtml(game.timeText)}${game.statusText ? ` &middot; ${escapeHtml(game.statusText)}` : ''}${liveScore}</div>
-      ${game.venue ? `<div class="game-venue">${escapeHtml(game.venue)}</div>` : ''}
+      <span class="game-teams">${escapeHtml(game.away.abbr)} @ ${escapeHtml(game.home.abbr)}</span>
+      <span class="game-meta">${escapeHtml(game.weekday)} ${escapeHtml(game.monthDay)} &middot; ${escapeHtml(game.timeText)}${liveScore}</span>
     </div>
   `;
 
-  const byLeague = new Map();
-  for (const e of entries) {
-    if (!byLeague.has(e.leagueId)) byLeague.set(e.leagueId, []);
-    byLeague.get(e.leagueId).push(e);
-  }
-
   const list = document.createElement('div');
-  list.className = 'game-leagues';
+  list.className = 'game-players';
 
-  for (const leagueEntries of byLeague.values()) {
-    const first = leagueEntries[0];
-    const block = document.createElement('div');
-    block.className = 'game-league-block';
+  for (const { playerName, team, leagues } of players.values()) {
+    const row = document.createElement('div');
+    row.className = 'viewing-row';
 
-    let matchupLine;
-    if (first.oppPoints == null) {
-      matchupLine = 'No matchup found this week.';
-    } else {
-      const margin = first.myPoints - first.oppPoints;
-      const scoreText = `${first.myPoints.toFixed(1)}&ndash;${first.oppPoints.toFixed(1)}`;
-      if (margin > 0) matchupLine = `Leading ${escapeHtml(first.oppTeamName)} ${scoreText} (+${margin.toFixed(1)}).`;
-      else if (margin === 0) matchupLine = `Tied with ${escapeHtml(first.oppTeamName)} ${scoreText}.`;
-      else matchupLine = `Trailing ${escapeHtml(first.oppTeamName)} ${scoreText} &mdash; need <b>${first.pointsNeeded.toFixed(1)}</b> more to win.`;
-    }
+    const chips = leagues.map((l) => {
+      let statusText = '';
+      let cls = '';
+      if (l.oppPoints != null) {
+        const margin = l.myPoints - l.oppPoints;
+        if (margin > 0) { statusText = `+${margin.toFixed(1)}`; cls = ' lead'; }
+        else if (margin === 0) { statusText = 'tied'; }
+        else { statusText = `need ${l.pointsNeeded.toFixed(1)}`; cls = ' trail'; }
+      }
+      const projText = l.projPts != null ? `${l.projPts.toFixed(1)}p` : '&mdash;';
+      return `<span class="league-chip${cls}"><b>${escapeHtml(l.leagueName)}</b>${statusText ? ` &middot; ${statusText}` : ''} &middot; ${projText}</span>`;
+    }).join('');
 
-    block.innerHTML = `
-      <div class="game-league-name">${escapeHtml(first.leagueName)}</div>
-      <div class="game-league-matchup">${matchupLine}</div>
-    `;
-
-    const playersWrap = document.createElement('div');
-    playersWrap.className = 'game-players';
-    for (const e of leagueEntries) {
-      const row = document.createElement('div');
-      row.className = 'player-row';
-      const projText = e.projPts != null ? `${e.final ? 'projected' : 'proj.'} ${e.projPts.toFixed(1)} pts` : 'no projection';
-      row.innerHTML = `<span class="slot-tag">${escapeHtml(e.slot)}</span><div class="player-info"><div class="player-name-line">${escapeHtml(e.playerName)} <span class="player-meta">(${escapeHtml(e.team)})</span></div></div><span class="game-player-proj">${escapeHtml(projText)}</span>`;
-      playersWrap.appendChild(row);
-    }
-    block.appendChild(playersWrap);
-    list.appendChild(block);
+    row.innerHTML = `<span class="viewing-player-name">${escapeHtml(playerName)} <span class="player-meta">${escapeHtml(team)}</span></span><span class="viewing-chips">${chips}</span>`;
+    list.appendChild(row);
   }
 
   card.appendChild(list);
