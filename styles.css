@@ -14,6 +14,10 @@
   --blue-bg: #17233d;
   --green: #34d399;
   --green-bg: #142f26;
+  --yellow: #eab308;
+  --yellow-bg: #362d0f;
+  --grey: #94a3b8;
+  --grey-bg: #232e47;
   --radius: 12px;
 }
 
@@ -264,11 +268,10 @@ main {
   line-height: 1.35;
 }
 
-.alert .icon { font-size: 1.05rem; }
-
 .alert.sev-high { background: var(--red-bg); border: 1px solid var(--red); }
 .alert.sev-mid { background: var(--orange-bg); border: 1px solid var(--orange); }
-.alert.sev-info { background: var(--blue-bg); border: 1px solid var(--blue); }
+.alert.sev-low { background: var(--yellow-bg); border: 1px solid var(--yellow); }
+.alert.sev-grey { background: var(--grey-bg); border: 1px solid var(--grey); }
 
 .alert b { display: block; margin-bottom: 2px; }
 
@@ -361,9 +364,9 @@ main {
 }
 
 .badge.bye { background: var(--red-bg); color: var(--red); }
-.badge.out { background: var(--red-bg); color: var(--red); }
-.badge.quest { background: var(--orange-bg); color: var(--orange); }
-.badge.thu { background: var(--blue-bg); color: var(--blue); }
+.badge-red { background: var(--red-bg); color: var(--red); }
+.badge-orange { background: var(--orange-bg); color: var(--orange); }
+.badge-yellow { background: var(--yellow-bg); color: var(--yellow); }
 
 .badge.game {
   background: var(--bg);
@@ -372,12 +375,12 @@ main {
   font-weight: 600;
 }
 
-/* Thursday games get the same blue emphasis as the old standalone THU badge —
-   that's the slot that locks early, worth catching the eye. */
-.badge.game.thu {
-  background: var(--blue-bg);
-  border-color: var(--blue);
-  color: var(--blue);
+/* Non-Sunday games (Thu/Fri/Sat/Mon) get a grey badge so they stand out as
+   worth double-checking against the early lock. */
+.badge.game.grey {
+  background: var(--grey-bg);
+  border-color: var(--grey);
+  color: var(--grey);
 }
 
 .badge.unknown {
@@ -506,5 +509,7 @@ main {
     --orange-bg: #fdf3d8;
     --blue-bg: #e6f0fe;
     --green-bg: #e3f9ef;
+    --yellow-bg: #fdf6d8;
+    --grey-bg: #e9edf5;
   }
 }

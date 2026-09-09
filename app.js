@@ -1,6 +1,6 @@
 // Sleeper Lineup Watch — client-side only. Everything below runs in the browser.
 
-const APP_VERSION = '2';
+const APP_VERSION = '3';
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1';
 const SLEEPER_PROJECTIONS_BASE = 'https://api.sleeper.app/projections/nfl';
@@ -25,6 +25,19 @@ const FLEX_ELIGIBILITY = {
 };
 
 const BAD_INJURY_STATUSES = new Set(['Out', 'Doubtful', 'IR', 'PUP', 'Sus', 'NA']);
+
+// Injury designation -> notice severity. Out/IR/PUP/Sus/NA are red (likely
+// won't play), Doubtful is orange, Questionable is yellow.
+function injurySeverity(status) {
+  if (status === 'Questionable') return 'low';
+  if (status === 'Doubtful') return 'mid';
+  if (BAD_INJURY_STATUSES.has(status)) return 'high';
+  return null;
+}
+
+// Slot types that give lineup flexibility — a Thursday lock there is worth a
+// heads-up since you may have wanted to juggle it before kickoff.
+const FLEX_SLOTS = new Set(['FLEX', 'WRRB_FLEX', 'WRTE_FLEX', 'REC_FLEX', 'RB_FLEX', 'SUPER_FLEX', 'IDP_FLEX']);
 
 const els = {
   form: document.getElementById('load-form'),
@@ -99,10 +112,14 @@ els.refreshPlayersBtn.addEventListener('click', () => {
   if (username) run(username, { forcePlayers: true });
 });
 
-// Restore last-used username on load, but don't auto-fetch (avoid surprise data use on cellular).
+// Restore last-used username on load and auto-fetch, so the app doesn't ask
+// for the username again on every refresh.
 window.addEventListener('DOMContentLoaded', () => {
   const saved = localStorage.getItem(USERNAME_KEY);
-  if (saved) els.input.value = saved;
+  if (saved) {
+    els.input.value = saved;
+    run(saved);
+  }
 });
 
 function setStatus(msg, isError) {
@@ -181,7 +198,7 @@ async function run(username, opts = {}) {
     }
 
     renderSeasonBanner(state, isRegularSeason);
-    renderLeagues(leagueData, playersById, week, isRegularSeason, schedule);
+    renderLeagues(leagueData, playersById, week, isRegularSeason, schedule, projectionsById);
     renderViewing(leagueData, playersById, week, isRegularSeason, schedule, projectionsById);
     els.tabNav.hidden = false;
 
@@ -428,7 +445,7 @@ function renderSeasonBanner(state, isRegularSeason) {
   }
 }
 
-function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule) {
+function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule, projectionsById) {
   els.leaguesContainer.innerHTML = '';
 
   for (const { league, users, myRoster } of leagueData) {
@@ -453,7 +470,7 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule)
     const recordText = `${record.wins ?? 0}-${record.losses ?? 0}${record.ties ? `-${record.ties}` : ''}`;
 
     const alerts = isRegularSeason
-      ? analyzeRoster(league, myRoster, playersById, week, schedule)
+      ? analyzeRoster(league, myRoster, playersById, week, schedule, projectionsById)
       : { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [] };
 
     card.innerHTML = `
@@ -479,24 +496,23 @@ function renderAlerts(alerts) {
 
   if (totalAlerts === 0) {
     wrap.className = 'no-alerts';
-    wrap.textContent = '✓ No bye, injury, or Thursday-lock issues in your starting lineup.';
+    wrap.textContent = 'No bye, injury, or Thursday-lock issues in your starting lineup.';
     return wrap;
   }
 
   wrap.className = 'alerts';
 
   for (const item of alerts.byeStarters) {
-    wrap.appendChild(alertRow('sev-high', '🛌', `${item.player.full_name} (${item.slot}) is on BYE — Week off, 0 points guaranteed.`, findSubs(alerts, item.player)));
+    wrap.appendChild(alertRow('sev-high', `${item.player.full_name} (${item.slot}) is on BYE — Week off, 0 points guaranteed.`, findSubs(alerts, item.player)));
   }
   for (const item of alerts.injuryStarters) {
-    const sev = item.severity === 'high' ? 'sev-high' : 'sev-mid';
-    const icon = item.severity === 'high' ? '🚑' : '⚠️';
-    wrap.appendChild(alertRow(sev, icon, `${item.player.full_name} (${item.slot}) is ${item.player.injury_status}${item.player.injury_body_part ? ` — ${item.player.injury_body_part}` : ''}.`, item.severity === 'high' ? findSubs(alerts, item.player) : null));
+    const sevClass = item.severity === 'high' ? 'sev-high' : item.severity === 'mid' ? 'sev-mid' : 'sev-low';
+    wrap.appendChild(alertRow(sevClass, `${item.player.full_name} (${item.slot}) is ${item.player.injury_status}${item.player.injury_body_part ? ` — ${item.player.injury_body_part}` : ''}.`, item.severity === 'high' ? findSubs(alerts, item.player) : null));
   }
   for (const item of alerts.thursdayFlags) {
     const where = item.isBench ? 'on your bench' : `starting at ${item.slot}`;
     const when = item.game ? ` (${item.game.monthDay}, ${item.game.timeText})` : '';
-    wrap.appendChild(alertRow('sev-info', '📅', `${item.player.full_name} plays Thursday Night${when} — ${where}. Set your final lineup before kickoff, that slot locks early.`, null));
+    wrap.appendChild(alertRow('sev-grey', `${item.player.full_name} plays Thursday Night${when} — ${where}. Set your final lineup before kickoff, that slot locks early.`, null));
   }
 
   return wrap;
@@ -507,7 +523,7 @@ function findSubs(alerts, player) {
   return rec ? rec.candidates : null;
 }
 
-function alertRow(sevClass, icon, text, candidates) {
+function alertRow(sevClass, text, candidates) {
   const row = document.createElement('div');
   row.className = `alert ${sevClass}`;
   const candHtml = candidates
@@ -515,7 +531,7 @@ function alertRow(sevClass, icon, text, candidates) {
         ? `<div class="sub-list">Bench options: ${candidates.map((c) => `<span class="cand">${escapeHtml(c.full_name)} (${c.position}${c.team ? ' · ' + c.team : ''})</span>`).join('')}</div>`
         : `<div class="sub-list">No eligible healthy bench replacement for this slot.</div>`)
     : '';
-  row.innerHTML = `<span class="icon">${icon}</span><div><div>${text}</div>${candHtml}</div>`;
+  row.innerHTML = `<div>${text}</div>${candHtml}`;
   return row;
 }
 
@@ -570,13 +586,13 @@ function playerRow(slot, player, week, schedule) {
   const bye = getByeWeek(player.team);
   const onBye = !!(bye && week && bye === week);
   const game = !onBye && schedule ? schedule.get(normalizeTeam(player.team)) : null;
-  const onThursday = game && game.weekday === 'Thu';
+  const nonSunday = game && game.weekday !== 'Sun';
 
   let gameChip = '';
   if (onBye) {
     gameChip = `<span class="badge bye">BYE</span>`;
   } else if (game) {
-    gameChip = `<span class="badge game${onThursday ? ' thu' : ''}">${escapeHtml(game.weekday)} ${escapeHtml(game.monthDay)} · ${escapeHtml(game.timeText)}</span>`;
+    gameChip = `<span class="badge game${nonSunday ? ' grey' : ''}">${escapeHtml(game.weekday)} ${escapeHtml(game.monthDay)} · ${escapeHtml(game.timeText)}</span>`;
   } else if (schedule) {
     // schedule loaded successfully but this team has no game this week (bye
     // not in our static table, postponed, etc.) — say so instead of guessing
@@ -584,8 +600,10 @@ function playerRow(slot, player, week, schedule) {
   }
 
   let statusBadges = '';
-  if (player.injury_status === 'Questionable') statusBadges += `<span class="badge quest">Q</span>`;
-  else if (BAD_INJURY_STATUSES.has(player.injury_status)) statusBadges += `<span class="badge out">${escapeHtml(player.injury_status)}</span>`;
+  const sev = injurySeverity(player.injury_status);
+  if (sev === 'low') statusBadges += `<span class="badge badge-yellow">Q</span>`;
+  else if (sev === 'mid') statusBadges += `<span class="badge badge-orange">${escapeHtml(player.injury_status)}</span>`;
+  else if (sev === 'high') statusBadges += `<span class="badge badge-red">${escapeHtml(player.injury_status)}</span>`;
 
   row.innerHTML = `
     <span class="slot-tag">${slot}</span>
@@ -603,7 +621,14 @@ function escapeHtml(str) {
 
 // ---------- Analysis ----------
 
-function analyzeRoster(league, roster, playersById, week, schedule) {
+function projectedPoints(pid, league, projectionsById) {
+  if (!projectionsById) return null;
+  const stats = projectionsById[pid];
+  if (!stats) return null;
+  return computeFantasyPoints(stats, league.scoring_settings);
+}
+
+function analyzeRoster(league, roster, playersById, week, schedule, projectionsById) {
   const startingSlotTypes = (league.roster_positions || []).filter((p) => p !== 'BN');
   const starters = roster.starters || [];
   const reserve = new Set(roster.reserve || []);
@@ -611,6 +636,12 @@ function analyzeRoster(league, roster, playersById, week, schedule) {
   const benchIds = (roster.players || []).filter((id) => !starters.includes(id) && !reserve.has(id) && !taxi.has(id));
 
   const alerts = { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [] };
+
+  // Track whether any starter has an injury designation or the lowest
+  // starter projection, to decide whether a Thursday bench player is worth
+  // flagging (see bench loop below).
+  let starterHasInjury = false;
+  let lowestStarterProjPts = null;
 
   for (let i = 0; i < startingSlotTypes.length; i++) {
     const slot = startingSlotTypes[i];
@@ -622,13 +653,18 @@ function analyzeRoster(league, roster, playersById, week, schedule) {
     const bye = getByeWeek(p.team);
     const onBye = !!(bye && bye === week);
     const injuryBad = BAD_INJURY_STATUSES.has(p.injury_status);
-    const injuryCaution = p.injury_status === 'Questionable';
+    const sev = injurySeverity(p.injury_status);
     const onThursday = isThursdayTeam(schedule, p.team);
 
+    if (sev) starterHasInjury = true;
+    const projPts = projectedPoints(pid, league, projectionsById);
+    if (projPts != null) lowestStarterProjPts = lowestStarterProjPts == null ? projPts : Math.min(lowestStarterProjPts, projPts);
+
     if (onBye) alerts.byeStarters.push({ slot, player: p });
-    if (injuryBad) alerts.injuryStarters.push({ slot, player: p, severity: 'high' });
-    else if (injuryCaution) alerts.injuryStarters.push({ slot, player: p, severity: 'low' });
-    if (onThursday) alerts.thursdayFlags.push({ slot, player: p, isBench: false, game: schedule.get(normalizeTeam(p.team)) });
+    if (sev) alerts.injuryStarters.push({ slot, player: p, severity: sev });
+    // Thursday lock only matters for starters here when the slot is a flex
+    // type — a single-position slot has no lineup flexibility to reconsider.
+    if (onThursday && FLEX_SLOTS.has(slot)) alerts.thursdayFlags.push({ slot, player: p, isBench: false, game: schedule.get(normalizeTeam(p.team)) });
 
     if (onBye || injuryBad) {
       const eligiblePositions = FLEX_ELIGIBILITY[slot] || [slot];
@@ -654,7 +690,16 @@ function analyzeRoster(league, roster, playersById, week, schedule) {
     if (!p) continue;
     const bye = getByeWeek(p.team);
     if (bye && bye === week) alerts.byeBench.push({ player: p });
-    if (isThursdayTeam(schedule, p.team)) alerts.thursdayFlags.push({ slot: 'BN', player: p, isBench: true, game: schedule.get(normalizeTeam(p.team)) });
+    if (isThursdayTeam(schedule, p.team)) {
+      // Only worth a notice if it's actionable before the Thursday lock: a
+      // starter already carries an injury designation, or this bench player
+      // projects for more points than your lowest starter.
+      const benchProjPts = projectedPoints(id, league, projectionsById);
+      const outscoresStarter = benchProjPts != null && lowestStarterProjPts != null && benchProjPts > lowestStarterProjPts;
+      if (starterHasInjury || outscoresStarter) {
+        alerts.thursdayFlags.push({ slot: 'BN', player: p, isBench: true, game: schedule.get(normalizeTeam(p.team)) });
+      }
+    }
   }
 
   return alerts;
