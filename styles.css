@@ -192,15 +192,6 @@ main {
   background: var(--bg-card-alt);
 }
 
-.league-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--border);
-  flex-shrink: 0;
-  object-fit: cover;
-}
-
 .league-title {
   flex: 1;
   min-width: 0;

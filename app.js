@@ -441,7 +441,6 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule,
 
     card.innerHTML = `
       <div class="league-card-header">
-        <img class="league-avatar" src="${league.avatar ? `https://sleepercdn.com/avatars/thumbs/${league.avatar}` : ''}" onerror="this.style.visibility='hidden'" alt="" />
         <div class="league-title">
           <h2>${escapeHtml(league.name)}</h2>
           <div class="sub">${escapeHtml(teamName)}</div>
