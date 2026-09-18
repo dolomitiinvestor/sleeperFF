@@ -1,7 +1,5 @@
 // Sleeper Lineup Watch — client-side only. Everything below runs in the browser.
 
-const APP_VERSION = '3';
-
 const SLEEPER_BASE = 'https://api.sleeper.app/v1';
 const SLEEPER_PROJECTIONS_BASE = 'https://api.sleeper.app/projections/nfl';
 const ESPN_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
@@ -49,43 +47,11 @@ const els = {
   leaguesContainer: document.getElementById('leagues-container'),
   refreshPlayersBtn: document.getElementById('refresh-players-btn'),
   playersUpdated: document.getElementById('players-updated'),
-  updateBanner: document.getElementById('update-banner'),
-  updateReloadBtn: document.getElementById('update-reload-btn'),
   tabNav: document.getElementById('tab-nav'),
   leaguesTab: document.getElementById('leagues-tab'),
   viewingTab: document.getElementById('viewing-tab'),
   viewingContainer: document.getElementById('viewing-container'),
 };
-
-// ---------- Update check (so the deployed webapp doesn't get stuck stale,
-// especially as an iOS "Add to Home Screen" app, which can otherwise launch
-// straight from its cached snapshot for a long time without hitting the
-// network). We fetch a tiny version.json with cache-busting + no-store, and
-// if it doesn't match the version baked into the app.js that's currently
-// running, prompt for a refresh. ----------
-
-els.updateReloadBtn.addEventListener('click', () => {
-  location.reload();
-});
-
-async function checkForUpdate() {
-  try {
-    const res = await fetch(`version.json?_=${Date.now()}`, { cache: 'no-store' });
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data && data.version && data.version !== APP_VERSION) {
-      els.updateBanner.hidden = false;
-    }
-  } catch {
-    // offline or blocked — just skip this check, we'll try again later
-  }
-}
-
-checkForUpdate();
-setInterval(checkForUpdate, 10 * 60 * 1000);
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') checkForUpdate();
-});
 
 // ---------- Tabs ----------
 
