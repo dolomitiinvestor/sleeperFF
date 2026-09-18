@@ -1,23 +1,23 @@
 :root {
-  --bg: #0f172a;
-  --bg-card: #1a2438;
-  --bg-card-alt: #202c47;
-  --border: #2b3854;
-  --text: #e7ecf7;
-  --text-muted: #93a1c0;
-  --accent: #4ade80;
+  --bg: #000000;
+  --bg-card: #121212;
+  --bg-card-alt: #1c1c1c;
+  --border: #2e2e2e;
+  --text: #f5f5f5;
+  --text-muted: #9a9a9a;
+  --accent: #ffffff;
   --red: #f87171;
-  --red-bg: #3a1e22;
+  --red-bg: #2a1414;
   --orange: #fbbf24;
-  --orange-bg: #3a2f14;
-  --blue: #60a5fa;
-  --blue-bg: #17233d;
-  --green: #34d399;
-  --green-bg: #142f26;
+  --orange-bg: #2a2210;
+  --blue: #93c5fd;
+  --blue-bg: #16191f;
+  --green: #6ee7b7;
+  --green-bg: #10201a;
   --yellow: #eab308;
-  --yellow-bg: #362d0f;
-  --grey: #94a3b8;
-  --grey-bg: #232e47;
+  --yellow-bg: #262010;
+  --grey: #a3a3a3;
+  --grey-bg: #1a1a1a;
   --radius: 12px;
 }
 
@@ -39,24 +39,24 @@ body {
 
 .app-header {
   padding: 20px 16px 14px;
-  background: linear-gradient(180deg, #142038 0%, #1c2b4a 100%);
+  background: linear-gradient(180deg, #000000 0%, #161616 100%);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 10;
 }
 
-/* The header bar is always a dark navy gradient regardless of theme, so its
+/* The header bar is always a fixed black gradient regardless of theme, so its
    text stays a fixed light color rather than following --text/--text-muted. */
 .app-header h1 {
   margin: 0 0 2px;
   font-size: 1.35rem;
-  color: #f3f5fb;
+  color: #ffffff;
 }
 
 .tagline {
   margin: 0 0 14px;
-  color: #a9b4d0;
+  color: #b0b0b0;
   font-size: 0.85rem;
 }
 
@@ -86,7 +86,7 @@ body {
   border-radius: 10px;
   border: none;
   background: var(--accent);
-  color: #06210f;
+  color: #000000;
   font-weight: 600;
   font-size: 15px;
   cursor: pointer;
@@ -100,7 +100,7 @@ body {
 .status-line {
   margin-top: 10px;
   font-size: 0.85rem;
-  color: #a9b4d0;
+  color: #b0b0b0;
 }
 
 .status-line.error {
@@ -495,21 +495,4 @@ main {
 .muted {
   color: var(--text-muted);
   font-size: 0.75rem;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f4f6fb;
-    --bg-card: #ffffff;
-    --bg-card-alt: #eef1f9;
-    --border: #dde3f0;
-    --text: #101828;
-    --text-muted: #5b6478;
-    --red-bg: #fde8e8;
-    --orange-bg: #fdf3d8;
-    --blue-bg: #e6f0fe;
-    --green-bg: #e3f9ef;
-    --yellow-bg: #fdf6d8;
-    --grey-bg: #e9edf5;
-  }
 }
