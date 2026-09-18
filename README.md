@@ -76,11 +76,3 @@ push. Nothing else needs to change.
 - **Matchup score / points needed** (Viewing tab): Sleeper's
   `/league/{id}/matchups/{week}` endpoint, which is the same live score
   Sleeper's own site shows.
-- **Staying up to date**: the app checks a small `version.json` (bypassing
-  the cache) on load, when you switch back to the tab, and every 10 minutes.
-  If it's newer than the version you're running, a "Refresh" banner shows up
-  — this matters most for the iPhone home-screen install, which can
-  otherwise launch from a stale cached copy. When you push a change to
-  `app.js`/`index.html`/etc., bump the version in both `version.json` and
-  the `APP_VERSION` constant at the top of `app.js` so returning users get
-  prompted.
