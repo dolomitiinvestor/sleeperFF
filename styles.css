@@ -472,20 +472,48 @@ main {
 .league-chip.trail { border-color: var(--red); color: var(--red); }
 .league-chip.trail b { color: var(--red); }
 
-.team-totals {
+.league-totals {
+  grid-column: 1 / -1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 4px;
+}
+
+.league-totals h3 {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+}
+
+.league-total-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
   border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  flex-wrap: wrap;
 }
 
-.team-total-chip {
-  font-size: 0.68rem;
+.league-total-row:first-of-type {
+  border-top: none;
+}
+
+.league-total-name {
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+
+.league-total-score {
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.team-total-chip b {
+.league-total-score.mine b,
+.league-total-score.theirs b {
   color: var(--text);
   font-weight: 600;
 }

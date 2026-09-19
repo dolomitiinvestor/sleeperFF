@@ -806,14 +806,11 @@ function renderViewing(leagueData, playersById, week, isRegularSeason, schedule,
       pointsNeeded,
       myPoints: matchup ? matchup.myPoints : null,
       oppPoints: matchup ? matchup.oppPoints : null,
-      teamTotal: matchup ? matchup.projMyTotal : null,
     });
 
     if (matchup && matchup.oppStarters && matchup.oppStarters.length) {
       addStartersToGames(byGame, 'theirs', startingSlotTypes, matchup.oppStarters, playersById, schedule, league, projectionsById, {
         leagueName: league.name,
-        teamTotal: matchup.projOppTotal,
-        oppTeamName: matchup.oppTeamName,
       });
     }
   }
@@ -822,12 +819,39 @@ function renderViewing(leagueData, playersById, week, isRegularSeason, schedule,
 
   if (!gamesWithPlayers.length) {
     container.innerHTML = `<div class="empty-state">None of your or your opponents' starters are in an upcoming game this week.</div>`;
-    return;
+  } else {
+    for (const { game, mine, theirs } of gamesWithPlayers) {
+      container.appendChild(renderGameCard(game, mine, theirs));
+    }
   }
 
-  for (const { game, mine, theirs } of gamesWithPlayers) {
-    container.appendChild(renderGameCard(game, mine, theirs));
+  container.appendChild(renderLeagueTotals(leagueData));
+}
+
+// One row per league at the bottom of the Viewing tab: the projected total
+// for your whole roster vs. your opponent's, for the week — independent of
+// which real games are shown above.
+function renderLeagueTotals(leagueData) {
+  const wrap = document.createElement('section');
+  wrap.className = 'league-totals';
+  wrap.appendChild(sectionHeading('Projected Week Totals'));
+
+  for (const { league, matchup } of leagueData) {
+    if (!matchup) continue;
+    const row = document.createElement('div');
+    row.className = 'league-total-row';
+    const myText = matchup.projMyTotal != null ? `${matchup.projMyTotal.toFixed(1)}p` : '&mdash;';
+    const oppText = matchup.projOppTotal != null ? `${matchup.projOppTotal.toFixed(1)}p` : '&mdash;';
+    const oppLabel = escapeHtml(matchup.oppTeamName || 'Opponent');
+    row.innerHTML = `
+      <span class="league-total-name">${escapeHtml(league.name)}</span>
+      <span class="league-total-score mine"><b>You</b>: ${myText}</span>
+      <span class="league-total-score theirs"><b>${oppLabel}</b>: ${oppText}</span>
+    `;
+    wrap.appendChild(row);
   }
+
+  return wrap;
 }
 
 // Walks one roster's starters and files each one (that's in an upcoming game)
@@ -898,15 +922,12 @@ function renderPlayerColumn(title, players, side) {
 
   const list = document.createElement('div');
   list.className = 'game-players';
-  const teamTotals = new Map(); // leagueName -> { total, oppTeamName }
 
   for (const { playerName, team, leagues } of players.values()) {
     const row = document.createElement('div');
     row.className = 'viewing-row';
 
     const chips = leagues.map((l) => {
-      if (!teamTotals.has(l.leagueName)) teamTotals.set(l.leagueName, { total: l.teamTotal, oppTeamName: l.oppTeamName });
-
       let statusText = '';
       let cls = '';
       if (side === 'mine' && l.oppPoints != null) {
@@ -924,18 +945,6 @@ function renderPlayerColumn(title, players, side) {
   }
 
   col.appendChild(list);
-
-  if (teamTotals.size) {
-    const totals = document.createElement('div');
-    totals.className = 'team-totals';
-    totals.innerHTML = [...teamTotals.entries()].map(([leagueName, info]) => {
-      const safeLeague = escapeHtml(leagueName);
-      const label = info.oppTeamName ? `${safeLeague} &middot; ${escapeHtml(info.oppTeamName)}` : safeLeague;
-      const totalText = info.total != null ? `${info.total.toFixed(1)}p proj` : '&mdash;';
-      return `<span class="team-total-chip"><b>${label}</b> week total: ${totalText}</span>`;
-    }).join('');
-    col.appendChild(totals);
-  }
 
   return col;
 }
