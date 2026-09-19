@@ -702,10 +702,14 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
     }
   }
 
-  // Flex-slot optimization: a fixed WR/RB/QB slot only accepts a same-position
-  // bench sub, but FLEX accepts any eligible position — so keeping whichever
-  // eligible starter has the *latest* kickoff in FLEX preserves the most
-  // last-minute swap options right up until the last of them locks.
+  // Flex-slot optimization: a fixed WR/RB/QB/TE slot only accepts a
+  // same-position bench sub, but FLEX accepts any eligible position — so
+  // keeping whichever eligible starter has the *latest* kickoff in FLEX
+  // preserves the most last-minute swap options right up until the last of
+  // them locks. Only compare same-position starters, though — swapping a WR
+  // into FLEX ahead of an RB (or a QB ahead of anything, outside SUPER_FLEX)
+  // isn't a like-for-like flexibility trade, it's a lineup change, so that's
+  // out of scope for this alert.
   const flexSlotIndices = [];
   for (let i = 0; i < startingSlotTypes.length; i++) {
     if (FLEX_SLOTS.has(startingSlotTypes[i])) flexSlotIndices.push(i);
@@ -716,17 +720,18 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
     const flexPid = starters[flexIdx];
     if (!flexPid || flexPid === '0') continue;
     const flexPlayer = playersById[flexPid];
-    if (!flexPlayer) continue;
+    if (!flexPlayer || !flexPlayer.position) continue;
     const flexGame = schedule ? schedule.get(normalizeTeam(flexPlayer.team)) : null;
     if (!flexGame || !flexGame.kickoff) continue;
 
-    const eligiblePositions = FLEX_ELIGIBILITY[flexSlot] || [];
     let latest = { player: flexPlayer, slot: flexSlot, game: flexGame };
 
     for (let i = 0; i < startingSlotTypes.length; i++) {
       if (i === flexIdx) continue;
       const slot = startingSlotTypes[i];
-      if (FLEX_SLOTS.has(slot) || !eligiblePositions.includes(slot)) continue;
+      // Same real position as whoever's in FLEX right now, and a genuine
+      // fixed slot for that position (not another flex-type slot).
+      if (FLEX_SLOTS.has(slot) || slot !== flexPlayer.position) continue;
       const pid = starters[i];
       if (!pid || pid === '0') continue;
       const p = playersById[pid];
