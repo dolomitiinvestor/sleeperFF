@@ -15,20 +15,28 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" />
 
-<link rel="stylesheet" href="styles.css?v=5" />
+<link rel="stylesheet" href="styles.css?v=6" />
 </head>
 <body>
 <header class="app-header">
-  <h1>SleeperWatch</h1>
+  <div class="header-row">
+    <h1>SleeperWatch</h1>
+    <button type="button" id="header-toggle" class="header-toggle" hidden aria-expanded="true" aria-controls="header-details">
+      <span id="header-summary" class="header-summary"></span>
+      <span class="chevron" aria-hidden="true">&#9662;</span>
+    </button>
+  </div>
   <p class="tagline">All your leagues. Byes, injuries, and Thursday locks in one glance.</p>
 
-  <form id="load-form" class="load-form" autocomplete="off">
-    <label for="username-input" class="sr-only">Sleeper username</label>
-    <input id="username-input" name="username" type="text" placeholder="Sleeper username" required inputmode="text" autocapitalize="none" autocorrect="off" spellcheck="false" />
-    <button type="submit" id="load-btn">Load My Teams</button>
-  </form>
+  <div id="header-details" class="header-details">
+    <form id="load-form" class="load-form" autocomplete="off">
+      <label for="username-input" class="sr-only">Sleeper username</label>
+      <input id="username-input" name="username" type="text" placeholder="Sleeper username" required inputmode="text" autocapitalize="none" autocorrect="off" spellcheck="false" />
+      <button type="submit" id="load-btn">Load My Teams</button>
+    </form>
 
-  <div id="status-line" class="status-line" hidden></div>
+    <div id="status-line" class="status-line" hidden></div>
+  </div>
 </header>
 
 <nav id="tab-nav" class="tab-nav" hidden>
@@ -59,6 +67,6 @@
 </footer>
 
 <script src="byeWeeks.js?v=1"></script>
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
