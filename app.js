@@ -330,6 +330,13 @@ function isThursdayTeam(schedule, team) {
   return !!g && g.weekday === 'Thu';
 }
 
+// Once a player's real game has kicked off, Sleeper locks their roster slot —
+// so any "swap this player" alert is stale and shouldn't keep showing.
+function gameHasStarted(schedule, team) {
+  const g = schedule && schedule.get(normalizeTeam(team));
+  return !!g && g.state && g.state !== 'pre';
+}
+
 // ---------- Weekly matchups (who am I playing, what's the score) ----------
 
 async function getWeekMatchups(leagueId, week) {
@@ -655,18 +662,20 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
     const injuryBad = BAD_INJURY_STATUSES.has(p.injury_status);
     const sev = injurySeverity(p.injury_status);
     const onThursday = isThursdayTeam(schedule, p.team);
+    const started = gameHasStarted(schedule, p.team);
 
     if (sev) starterHasInjury = true;
     const projPts = projectedPoints(pid, league, projectionsById);
     if (projPts != null) lowestStarterProjPts = lowestStarterProjPts == null ? projPts : Math.min(lowestStarterProjPts, projPts);
 
     if (onBye) alerts.byeStarters.push({ slot, player: p });
-    if (sev) alerts.injuryStarters.push({ slot, player: p, severity: sev });
+    if (sev && !started) alerts.injuryStarters.push({ slot, player: p, severity: sev });
     // Thursday lock only matters for starters here when the slot is a flex
-    // type — a single-position slot has no lineup flexibility to reconsider.
-    if (onThursday && FLEX_SLOTS.has(slot)) alerts.thursdayFlags.push({ slot, player: p, isBench: false, game: schedule.get(normalizeTeam(p.team)) });
+    // type — a single-position slot has no lineup flexibility to reconsider —
+    // and only before that lock actually happens.
+    if (onThursday && FLEX_SLOTS.has(slot) && !started) alerts.thursdayFlags.push({ slot, player: p, isBench: false, game: schedule.get(normalizeTeam(p.team)) });
 
-    if (onBye || injuryBad) {
+    if (onBye || (injuryBad && !started)) {
       const eligiblePositions = FLEX_ELIGIBILITY[slot] || [slot];
       const candidates = benchIds
         .map((id) => playersById[id])
@@ -690,7 +699,7 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
     if (!p) continue;
     const bye = getByeWeek(p.team);
     if (bye && bye === week) alerts.byeBench.push({ player: p });
-    if (isThursdayTeam(schedule, p.team)) {
+    if (isThursdayTeam(schedule, p.team) && !gameHasStarted(schedule, p.team)) {
       // Only worth a notice if it's actionable before the Thursday lock: a
       // starter already carries an injury designation, or this bench player
       // projects for more points than your lowest starter.
@@ -722,7 +731,9 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
     const flexPlayer = playersById[flexPid];
     if (!flexPlayer || !flexPlayer.position) continue;
     const flexGame = schedule ? schedule.get(normalizeTeam(flexPlayer.team)) : null;
-    if (!flexGame || !flexGame.kickoff) continue;
+    // Once the FLEX starter's game has kicked off, that slot is locked —
+    // nothing left to swap.
+    if (!flexGame || !flexGame.kickoff || flexGame.state !== 'pre') continue;
 
     let latest = { player: flexPlayer, slot: flexSlot, game: flexGame };
 
@@ -737,7 +748,9 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
       const p = playersById[pid];
       if (!p) continue;
       const game = schedule ? schedule.get(normalizeTeam(p.team)) : null;
-      if (!game || !game.kickoff) continue;
+      // A candidate whose game already started is locked into their own
+      // slot and can't be moved into FLEX anymore.
+      if (!game || !game.kickoff || game.state !== 'pre') continue;
       if (new Date(game.kickoff) > new Date(latest.game.kickoff)) {
         latest = { player: p, slot, game };
       }
