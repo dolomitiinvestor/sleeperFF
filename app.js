@@ -141,11 +141,13 @@ async function run(username, opts = {}) {
       return { league: detail, rosters, users, myRoster, matchup };
     }));
 
-    // Collect every player id we'll need to display, across all leagues.
+    // Collect every player id we'll need to display, across all leagues —
+    // including opponents' starters, so the Viewing tab can show their side too.
     const neededIds = new Set();
-    for (const { myRoster } of leagueData) {
+    for (const { myRoster, matchup } of leagueData) {
       if (!myRoster) continue;
       for (const id of myRoster.players || []) neededIds.add(id);
+      if (matchup) for (const id of matchup.oppStarters || []) neededIds.add(id);
     }
 
     setStatus('Loading player database (cached ~daily)…');
@@ -161,6 +163,13 @@ async function run(username, opts = {}) {
     if (isRegularSeason) {
       setStatus('Loading projections…');
       projectionsById = await getProjectionsById(state.season, week).catch(() => null);
+    }
+
+    // Projected week total per team, for the Viewing tab's per-team totals.
+    for (const entry of leagueData) {
+      if (!entry.myRoster || !entry.matchup) continue;
+      entry.matchup.projMyTotal = sumProjected(entry.myRoster.starters, entry.league, projectionsById);
+      entry.matchup.projOppTotal = sumProjected(entry.matchup.oppStarters, entry.league, projectionsById);
     }
 
     renderSeasonBanner(state, isRegularSeason);
@@ -287,6 +296,7 @@ async function getWeekSchedule(season, week) {
           venue,
           state,
           eventId: event.id,
+          kickoff: event.date,
         });
       }
 
@@ -340,6 +350,7 @@ function findMatchupSummary(matchups, myRoster, rosters, users) {
     myPoints: mine.points || 0,
     oppPoints: opp ? (opp.points || 0) : null,
     oppTeamName,
+    oppStarters: opp ? (opp.starters || []) : [],
   };
 }
 
@@ -437,7 +448,7 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule,
 
     const alerts = isRegularSeason
       ? analyzeRoster(league, myRoster, playersById, week, schedule, projectionsById)
-      : { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [] };
+      : { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [], flexOptimization: [] };
 
     card.innerHTML = `
       <div class="league-card-header">
@@ -457,7 +468,7 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule,
 
 function renderAlerts(alerts) {
   const wrap = document.createElement('div');
-  const totalAlerts = alerts.byeStarters.length + alerts.injuryStarters.length + alerts.thursdayFlags.length;
+  const totalAlerts = alerts.byeStarters.length + alerts.injuryStarters.length + alerts.thursdayFlags.length + alerts.flexOptimization.length;
 
   if (totalAlerts === 0) {
     wrap.className = 'no-alerts';
@@ -478,6 +489,13 @@ function renderAlerts(alerts) {
     const where = item.isBench ? 'on your bench' : `starting at ${item.slot}`;
     const when = item.game ? ` (${item.game.monthDay}, ${item.game.timeText})` : '';
     wrap.appendChild(alertRow('sev-grey', `${item.player.full_name} plays Thursday Night${when} — ${where}. Set your final lineup before kickoff, that slot locks early.`, null));
+  }
+  for (const item of alerts.flexOptimization) {
+    wrap.appendChild(alertRow(
+      'sev-grey',
+      `${item.betterPlayer.full_name} (${item.betterSlot}, ${item.betterGame.weekday} ${item.betterGame.monthDay} ${item.betterGame.timeText}) plays later than ${item.flexPlayer.full_name} in your FLEX (${item.flexGame.weekday} ${item.flexGame.monthDay} ${item.flexGame.timeText}) — swap them into FLEX for maximum flexibility.`,
+      null
+    ));
   }
 
   return wrap;
@@ -593,6 +611,23 @@ function projectedPoints(pid, league, projectionsById) {
   return computeFantasyPoints(stats, league.scoring_settings);
 }
 
+// Sums projected points across a set of starters, for the "projected week
+// total" shown per team in the Viewing tab. Returns null (rendered as
+// "—") only when none of the starters have a projection yet.
+function sumProjected(pids, league, projectionsById) {
+  let total = 0;
+  let any = false;
+  for (const pid of pids || []) {
+    if (!pid || pid === '0') continue;
+    const pts = projectedPoints(pid, league, projectionsById);
+    if (pts != null) {
+      total += pts;
+      any = true;
+    }
+  }
+  return any ? total : null;
+}
+
 function analyzeRoster(league, roster, playersById, week, schedule, projectionsById) {
   const startingSlotTypes = (league.roster_positions || []).filter((p) => p !== 'BN');
   const starters = roster.starters || [];
@@ -600,7 +635,7 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
   const taxi = new Set(roster.taxi || []);
   const benchIds = (roster.players || []).filter((id) => !starters.includes(id) && !reserve.has(id) && !taxi.has(id));
 
-  const alerts = { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [] };
+  const alerts = { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [], flexOptimization: [] };
 
   // Track whether any starter has an injury designation or the lowest
   // starter projection, to decide whether a Thursday bench player is worth
@@ -667,6 +702,54 @@ function analyzeRoster(league, roster, playersById, week, schedule, projectionsB
     }
   }
 
+  // Flex-slot optimization: a fixed WR/RB/QB slot only accepts a same-position
+  // bench sub, but FLEX accepts any eligible position — so keeping whichever
+  // eligible starter has the *latest* kickoff in FLEX preserves the most
+  // last-minute swap options right up until the last of them locks.
+  const flexSlotIndices = [];
+  for (let i = 0; i < startingSlotTypes.length; i++) {
+    if (FLEX_SLOTS.has(startingSlotTypes[i])) flexSlotIndices.push(i);
+  }
+
+  for (const flexIdx of flexSlotIndices) {
+    const flexSlot = startingSlotTypes[flexIdx];
+    const flexPid = starters[flexIdx];
+    if (!flexPid || flexPid === '0') continue;
+    const flexPlayer = playersById[flexPid];
+    if (!flexPlayer) continue;
+    const flexGame = schedule ? schedule.get(normalizeTeam(flexPlayer.team)) : null;
+    if (!flexGame || !flexGame.kickoff) continue;
+
+    const eligiblePositions = FLEX_ELIGIBILITY[flexSlot] || [];
+    let latest = { player: flexPlayer, slot: flexSlot, game: flexGame };
+
+    for (let i = 0; i < startingSlotTypes.length; i++) {
+      if (i === flexIdx) continue;
+      const slot = startingSlotTypes[i];
+      if (FLEX_SLOTS.has(slot) || !eligiblePositions.includes(slot)) continue;
+      const pid = starters[i];
+      if (!pid || pid === '0') continue;
+      const p = playersById[pid];
+      if (!p) continue;
+      const game = schedule ? schedule.get(normalizeTeam(p.team)) : null;
+      if (!game || !game.kickoff) continue;
+      if (new Date(game.kickoff) > new Date(latest.game.kickoff)) {
+        latest = { player: p, slot, game };
+      }
+    }
+
+    if (latest.player !== flexPlayer) {
+      alerts.flexOptimization.push({
+        flexSlot,
+        flexPlayer,
+        flexGame,
+        betterSlot: latest.slot,
+        betterPlayer: latest.player,
+        betterGame: latest.game,
+      });
+    }
+  }
+
   return alerts;
 }
 
@@ -689,58 +772,73 @@ function renderViewing(leagueData, playersById, week, isRegularSeason, schedule,
 
   // Only games that haven't finished yet — once a game is final there's
   // nothing left to watch for.
-  const byGame = new Map(); // event id -> { game, players: Map(pid -> { playerName, team, leagues }) }
+  const byGame = new Map(); // event id -> { game, mine: Map(pid -> {...}), theirs: Map(pid -> {...}) }
   for (const g of schedule.games) {
     if (g.state === 'post') continue;
-    byGame.set(g.id, { game: g, players: new Map() });
+    byGame.set(g.id, { game: g, mine: new Map(), theirs: new Map() });
   }
 
   for (const { league, myRoster, matchup } of leagueData) {
     if (!myRoster) continue;
     const startingSlotTypes = (league.roster_positions || []).filter((p) => p !== 'BN');
-    const starters = myRoster.starters || [];
     const pointsNeeded = matchup && matchup.oppPoints != null ? Math.max(matchup.oppPoints - matchup.myPoints, 0) : null;
 
-    for (let i = 0; i < startingSlotTypes.length; i++) {
-      const pid = starters[i];
-      if (!pid || pid === '0') continue;
-      const player = playersById[pid];
-      if (!player || !player.team) continue;
-      const gameInfo = schedule.get(normalizeTeam(player.team));
-      if (!gameInfo || gameInfo.eventId == null) continue; // bye week or unknown
+    addStartersToGames(byGame, 'mine', startingSlotTypes, myRoster.starters || [], playersById, schedule, league, projectionsById, {
+      leagueName: league.name,
+      pointsNeeded,
+      myPoints: matchup ? matchup.myPoints : null,
+      oppPoints: matchup ? matchup.oppPoints : null,
+      teamTotal: matchup ? matchup.projMyTotal : null,
+    });
 
-      const bucket = byGame.get(gameInfo.eventId);
-      if (!bucket) continue; // game already final, or unknown
-
-      const projStats = projectionsById ? projectionsById[pid] : null;
-      const projPts = projStats ? computeFantasyPoints(projStats, league.scoring_settings) : null;
-
-      if (!bucket.players.has(pid)) {
-        bucket.players.set(pid, { playerName: player.full_name, team: normalizeTeam(player.team), leagues: [] });
-      }
-      bucket.players.get(pid).leagues.push({
+    if (matchup && matchup.oppStarters && matchup.oppStarters.length) {
+      addStartersToGames(byGame, 'theirs', startingSlotTypes, matchup.oppStarters, playersById, schedule, league, projectionsById, {
         leagueName: league.name,
-        projPts,
-        pointsNeeded,
-        myPoints: matchup ? matchup.myPoints : null,
-        oppPoints: matchup ? matchup.oppPoints : null,
+        teamTotal: matchup.projOppTotal,
+        oppTeamName: matchup.oppTeamName,
       });
     }
   }
 
-  const gamesWithPlayers = [...byGame.values()].filter((b) => b.players.size > 0);
+  const gamesWithPlayers = [...byGame.values()].filter((b) => b.mine.size > 0 || b.theirs.size > 0);
 
   if (!gamesWithPlayers.length) {
-    container.innerHTML = `<div class="empty-state">None of your starters are in an upcoming game this week.</div>`;
+    container.innerHTML = `<div class="empty-state">None of your or your opponents' starters are in an upcoming game this week.</div>`;
     return;
   }
 
-  for (const { game, players } of gamesWithPlayers) {
-    container.appendChild(renderGameCard(game, players));
+  for (const { game, mine, theirs } of gamesWithPlayers) {
+    container.appendChild(renderGameCard(game, mine, theirs));
   }
 }
 
-function renderGameCard(game, players) {
+// Walks one roster's starters and files each one (that's in an upcoming game)
+// into that game's bucket under `side` ('mine' or 'theirs'), tagged with the
+// league context needed to render its chip.
+function addStartersToGames(byGame, side, startingSlotTypes, starters, playersById, schedule, league, projectionsById, leagueMeta) {
+  for (let i = 0; i < startingSlotTypes.length; i++) {
+    const pid = starters[i];
+    if (!pid || pid === '0') continue;
+    const player = playersById[pid];
+    if (!player || !player.team) continue;
+    const gameInfo = schedule.get(normalizeTeam(player.team));
+    if (!gameInfo || gameInfo.eventId == null) continue; // bye week or unknown
+
+    const bucket = byGame.get(gameInfo.eventId);
+    if (!bucket) continue; // game already final, or unknown
+
+    const projStats = projectionsById ? projectionsById[pid] : null;
+    const projPts = projStats ? computeFantasyPoints(projStats, league.scoring_settings) : null;
+
+    const players = bucket[side];
+    if (!players.has(pid)) {
+      players.set(pid, { playerName: player.full_name, team: normalizeTeam(player.team), leagues: [] });
+    }
+    players.get(pid).leagues.push({ ...leagueMeta, projPts });
+  }
+}
+
+function renderGameCard(game, myPlayers, theirPlayers) {
   const card = document.createElement('section');
   card.className = 'game-card';
 
@@ -755,17 +853,45 @@ function renderGameCard(game, players) {
     </div>
   `;
 
+  const columns = document.createElement('div');
+  columns.className = 'game-columns';
+  columns.appendChild(renderPlayerColumn('Your players', myPlayers, 'mine'));
+  columns.appendChild(renderPlayerColumn('Opponent players', theirPlayers, 'theirs'));
+  card.appendChild(columns);
+
+  return card;
+}
+
+function renderPlayerColumn(title, players, side) {
+  const col = document.createElement('div');
+  col.className = `game-col ${side}`;
+
+  const heading = document.createElement('h4');
+  heading.textContent = title;
+  col.appendChild(heading);
+
+  if (!players.size) {
+    const empty = document.createElement('div');
+    empty.className = 'player-meta empty-col';
+    empty.textContent = side === 'mine' ? 'None of your starters play in this game.' : "None of their starters play in this game.";
+    col.appendChild(empty);
+    return col;
+  }
+
   const list = document.createElement('div');
   list.className = 'game-players';
+  const teamTotals = new Map(); // leagueName -> { total, oppTeamName }
 
   for (const { playerName, team, leagues } of players.values()) {
     const row = document.createElement('div');
     row.className = 'viewing-row';
 
     const chips = leagues.map((l) => {
+      if (!teamTotals.has(l.leagueName)) teamTotals.set(l.leagueName, { total: l.teamTotal, oppTeamName: l.oppTeamName });
+
       let statusText = '';
       let cls = '';
-      if (l.oppPoints != null) {
+      if (side === 'mine' && l.oppPoints != null) {
         const margin = l.myPoints - l.oppPoints;
         if (margin > 0) { statusText = `+${margin.toFixed(1)}`; cls = ' lead'; }
         else if (margin === 0) { statusText = 'tied'; }
@@ -779,6 +905,19 @@ function renderGameCard(game, players) {
     list.appendChild(row);
   }
 
-  card.appendChild(list);
-  return card;
+  col.appendChild(list);
+
+  if (teamTotals.size) {
+    const totals = document.createElement('div');
+    totals.className = 'team-totals';
+    totals.innerHTML = [...teamTotals.entries()].map(([leagueName, info]) => {
+      const safeLeague = escapeHtml(leagueName);
+      const label = info.oppTeamName ? `${safeLeague} &middot; ${escapeHtml(info.oppTeamName)}` : safeLeague;
+      const totalText = info.total != null ? `${info.total.toFixed(1)}p proj` : '&mdash;';
+      return `<span class="team-total-chip"><b>${label}</b> week total: ${totalText}</span>`;
+    }).join('');
+    col.appendChild(totals);
+  }
+
+  return col;
 }
