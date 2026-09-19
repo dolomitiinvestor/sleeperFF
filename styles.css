@@ -362,7 +362,7 @@ main {
   gap: 10px;
 }
 
-@media (max-width: 360px) {
+@media (max-width: 700px) {
   .viewing-container { grid-template-columns: 1fr; }
 }
 
@@ -391,6 +391,38 @@ main {
 .game-meta {
   font-size: 0.68rem;
   color: var(--text-muted);
+}
+
+.game-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 420px) {
+  .game-columns { grid-template-columns: 1fr; }
+  .game-col.mine { border-right: none; border-bottom: 1px solid var(--border); }
+}
+
+.game-col {
+  min-width: 0;
+}
+
+.game-col.mine {
+  border-right: 1px solid var(--border);
+}
+
+.game-col h4 {
+  margin: 0;
+  padding: 6px 10px 2px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.empty-col {
+  padding: 4px 10px 8px;
+  font-size: 0.72rem;
 }
 
 .game-players {
@@ -439,6 +471,24 @@ main {
 .league-chip.lead b { color: var(--green); }
 .league-chip.trail { border-color: var(--red); color: var(--red); }
 .league-chip.trail b { color: var(--red); }
+
+.team-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.team-total-chip {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.team-total-chip b {
+  color: var(--text);
+  font-weight: 600;
+}
 
 .app-footer {
   text-align: center;
