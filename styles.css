@@ -54,10 +54,59 @@ body {
   color: #ffffff;
 }
 
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header-row h1 {
+  flex-shrink: 0;
+}
+
+.header-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 60%;
+  padding: 4px 0;
+  background: none;
+  border: none;
+  color: #b0b0b0;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.header-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-toggle .chevron {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+}
+
+.app-header.collapsed .header-toggle .chevron {
+  transform: rotate(-90deg);
+}
+
+.app-header.collapsed .tagline,
+.app-header.collapsed .header-details {
+  display: none;
+}
+
 .tagline {
   margin: 0 0 14px;
   color: #b0b0b0;
   font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .load-form {
@@ -105,6 +154,12 @@ body {
 
 .status-line.error {
   color: #fca5a5;
+}
+
+@media (max-width: 480px) {
+  .tagline {
+    font-size: 3vw;
+  }
 }
 
 .tab-nav {

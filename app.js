@@ -38,6 +38,9 @@ function injurySeverity(status) {
 const FLEX_SLOTS = new Set(['FLEX', 'WRRB_FLEX', 'WRTE_FLEX', 'REC_FLEX', 'RB_FLEX', 'SUPER_FLEX', 'IDP_FLEX']);
 
 const els = {
+  header: document.querySelector('.app-header'),
+  headerToggle: document.getElementById('header-toggle'),
+  headerSummary: document.getElementById('header-summary'),
   form: document.getElementById('load-form'),
   input: document.getElementById('username-input'),
   loadBtn: document.getElementById('load-btn'),
@@ -72,6 +75,11 @@ els.form.addEventListener('submit', (e) => {
   run(username);
 });
 
+els.headerToggle.addEventListener('click', () => {
+  const collapsed = els.header.classList.toggle('collapsed');
+  els.headerToggle.setAttribute('aria-expanded', String(!collapsed));
+});
+
 els.refreshPlayersBtn.addEventListener('click', () => {
   localStorage.removeItem(PLAYERS_CACHE_KEY);
   const username = els.input.value.trim() || localStorage.getItem(USERNAME_KEY);
@@ -103,6 +111,8 @@ async function fetchJSON(url) {
 async function run(username, opts = {}) {
   els.loadBtn.disabled = true;
   els.emptyState.hidden = true;
+  els.header.classList.remove('collapsed');
+  els.headerToggle.hidden = true;
   setStatus('Looking up your Sleeper account…');
 
   try {
@@ -177,8 +187,14 @@ async function run(username, opts = {}) {
     renderViewing(leagueData, playersById, week, isRegularSeason, schedule, projectionsById);
     els.tabNav.hidden = false;
 
-    setStatus(`Loaded ${leagueData.filter(l => l.myRoster).length} of ${leagueData.length} league${leagueData.length === 1 ? '' : 's'} for ${user.display_name || username}.`);
+    const loadedCount = leagueData.filter(l => l.myRoster).length;
+    setStatus(`Loaded ${loadedCount} of ${leagueData.length} league${leagueData.length === 1 ? '' : 's'} for ${user.display_name || username}.`);
     updatePlayersFooter();
+
+    els.headerSummary.textContent = `${user.display_name || username} · ${loadedCount} of ${leagueData.length} league${leagueData.length === 1 ? '' : 's'} loaded`;
+    els.headerToggle.hidden = false;
+    els.headerToggle.setAttribute('aria-expanded', 'false');
+    els.header.classList.add('collapsed');
   } catch (err) {
     console.error(err);
     setStatus(err.message || 'Something went wrong.', true);
