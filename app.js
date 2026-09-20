@@ -48,6 +48,7 @@ const els = {
   emptyState: document.getElementById('empty-state'),
   seasonBanner: document.getElementById('season-banner'),
   leaguesContainer: document.getElementById('leagues-container'),
+  leaguesDots: document.getElementById('leagues-dots'),
   refreshPlayersBtn: document.getElementById('refresh-players-btn'),
   playersUpdated: document.getElementById('players-updated'),
   tabNav: document.getElementById('tab-nav'),
@@ -448,6 +449,9 @@ function renderSeasonBanner(state, isRegularSeason) {
 function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule, projectionsById) {
   els.leaguesContainer.innerHTML = '';
 
+  const leagueCards = [];
+  const decisionGroups = [];
+
   for (const { league, users, myRoster } of leagueData) {
     const card = document.createElement('section');
     card.className = 'league-card';
@@ -460,7 +464,7 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule,
             <div class="sub">Couldn't find your roster in this league.</div>
           </div>
         </div>`;
-      els.leaguesContainer.appendChild(card);
+      leagueCards.push(card);
       continue;
     }
 
@@ -472,6 +476,11 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule,
     const alerts = isRegularSeason
       ? analyzeRoster(league, myRoster, playersById, week, schedule, projectionsById)
       : { byeStarters: [], byeBench: [], injuryStarters: [], thursdayFlags: [], subRecommendations: [], flexOptimization: [] };
+
+    const totalAlerts = alerts.byeStarters.length + alerts.injuryStarters.length + alerts.thursdayFlags.length + alerts.flexOptimization.length;
+    if (totalAlerts > 0) {
+      decisionGroups.push({ leagueName: league.name, teamName, alerts });
+    }
 
     card.innerHTML = `
       <div class="league-card-header">
@@ -485,8 +494,96 @@ function renderLeagues(leagueData, playersById, week, isRegularSeason, schedule,
 
     card.appendChild(renderAlerts(alerts));
     card.appendChild(renderRosterList(league, myRoster, playersById, week, schedule));
-    els.leaguesContainer.appendChild(card);
+    leagueCards.push(card);
   }
+
+  if (isRegularSeason) {
+    els.leaguesContainer.appendChild(renderDecisionPointsCard(decisionGroups, leagueData.length));
+  }
+  for (const card of leagueCards) els.leaguesContainer.appendChild(card);
+
+  updateLeagueDots();
+}
+
+// A leading summary card — a "quasi tab" that's always the first swipe stop
+// on mobile — pooling every league's bye/injury/Thursday-lock alerts so you
+// don't have to flip through each league to see what needs a decision.
+function renderDecisionPointsCard(decisionGroups, totalLeagues) {
+  const card = document.createElement('section');
+  card.className = 'league-card decision-points-card';
+
+  const summary = decisionGroups.length === 0
+    ? `All clear across ${totalLeagues} league${totalLeagues === 1 ? '' : 's'}.`
+    : `${decisionGroups.length} of ${totalLeagues} league${totalLeagues === 1 ? '' : 's'} need a lineup check.`;
+
+  card.innerHTML = `
+    <div class="league-card-header">
+      <div class="league-title">
+        <h2>Decision Points</h2>
+        <div class="sub">${escapeHtml(summary)}</div>
+      </div>
+    </div>
+  `;
+
+  if (decisionGroups.length === 0) {
+    const wrap = document.createElement('div');
+    wrap.className = 'no-alerts';
+    wrap.textContent = 'No bye, injury, or Thursday-lock issues across any of your leagues this week.';
+    card.appendChild(wrap);
+    return card;
+  }
+
+  for (const group of decisionGroups) {
+    const groupWrap = document.createElement('div');
+    groupWrap.className = 'decision-group';
+    const heading = document.createElement('h3');
+    heading.textContent = `${group.leagueName} · ${group.teamName}`;
+    groupWrap.appendChild(heading);
+    groupWrap.appendChild(renderAlerts(group.alerts));
+    card.appendChild(groupWrap);
+  }
+
+  return card;
+}
+
+// ---------- Swipe-carousel position dots (mobile) ----------
+
+let leagueDotsObserver = null;
+
+function updateLeagueDots() {
+  if (leagueDotsObserver) {
+    leagueDotsObserver.disconnect();
+    leagueDotsObserver = null;
+  }
+
+  const cards = Array.from(els.leaguesContainer.querySelectorAll('.league-card'));
+  els.leaguesDots.innerHTML = '';
+  els.leaguesDots.hidden = cards.length <= 1;
+  if (cards.length <= 1) return;
+
+  const dots = cards.map((card, i) => {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'dot';
+    dot.setAttribute('aria-label', `Go to card ${i + 1} of ${cards.length}`);
+    dot.addEventListener('click', () => card.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' }));
+    els.leaguesDots.appendChild(dot);
+    return dot;
+  });
+  dots[0].classList.add('active');
+
+  leagueDotsObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const idx = cards.indexOf(entry.target);
+        if (idx === -1) continue;
+        dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+      }
+    },
+    { root: els.leaguesContainer, threshold: 0.6 }
+  );
+  cards.forEach((card) => leagueDotsObserver.observe(card));
 }
 
 function renderAlerts(alerts) {
