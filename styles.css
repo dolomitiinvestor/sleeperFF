@@ -231,12 +231,82 @@ main {
   gap: 18px;
 }
 
+.leagues-dots {
+  display: none;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.leagues-dots .dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--border);
+  cursor: pointer;
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.leagues-dots .dot.active {
+  width: 18px;
+  background: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .leagues-dots {
+    display: flex;
+  }
+
+  .leagues-container {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 14px;
+  }
+
+  .leagues-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .league-card {
+    flex: 0 0 100%;
+    max-width: 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+}
+
 .league-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   min-width: 0;
+}
+
+.decision-points-card {
+  border-color: var(--accent);
+}
+
+.decision-group + .decision-group {
+  margin-top: 4px;
+}
+
+.decision-group h3 {
+  margin: 14px 16px 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.decision-group:first-child h3 {
+  margin-top: 10px;
 }
 
 .league-card-header {
