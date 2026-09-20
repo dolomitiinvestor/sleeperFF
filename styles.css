@@ -588,63 +588,64 @@ main {
   color: var(--text-muted);
 }
 
+/* Two columns — your players left, opponent players right — kept side by
+   side even on mobile. Cells are appended in leagueName-sorted pairs, so
+   grid auto-placement lines up each league's mine/theirs cell in the same
+   row: a head-to-head layout with no extra alignment logic needed. */
 .game-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
 }
 
-@media (max-width: 420px) {
-  .game-columns { grid-template-columns: 1fr; }
-  .game-col.mine { border-right: none; border-bottom: 1px solid var(--border); }
-}
-
-.game-col {
-  min-width: 0;
-}
-
-.game-col.mine {
-  border-right: 1px solid var(--border);
-}
-
-.game-col h4 {
+.col-heading {
   margin: 0;
-  padding: 6px 10px 2px;
+  padding: 6px 8px 2px;
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: var(--text-muted);
 }
 
-.empty-col {
-  padding: 4px 10px 8px;
+.col-heading.mine {
+  border-right: 1px solid var(--border);
+}
+
+.game-cell {
+  min-width: 0;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+}
+
+.game-cell.mine {
+  border-right: 1px solid var(--border);
+}
+
+.game-cell.empty {
+  color: var(--text-muted);
   font-size: 0.72rem;
 }
 
-.game-players {
-  padding: 2px 0;
-}
-
-.viewing-row {
-  padding: 6px 10px;
-  border-top: 1px solid var(--border);
-  font-size: 0.78rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  flex-wrap: wrap;
+.league-tag {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .viewing-player-name {
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.viewing-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  justify-content: flex-end;
+.game-cell .league-chip {
+  display: inline-block;
+  margin-top: 3px;
 }
 
 .league-chip {
@@ -657,15 +658,8 @@ main {
   white-space: nowrap;
 }
 
-.league-chip b {
-  color: var(--text);
-  font-weight: 600;
-}
-
 .league-chip.lead { border-color: var(--green); color: var(--green); }
-.league-chip.lead b { color: var(--green); }
 .league-chip.trail { border-color: var(--red); color: var(--red); }
-.league-chip.trail b { color: var(--red); }
 
 .league-totals {
   grid-column: 1 / -1;
