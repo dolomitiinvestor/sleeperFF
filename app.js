@@ -903,10 +903,10 @@ function renderViewing(leagueData, playersById, week, isRegularSeason, schedule,
 
   // Only games that haven't finished yet — once a game is final there's
   // nothing left to watch for.
-  const byGame = new Map(); // event id -> { game, mine: Map(pid -> {...}), theirs: Map(pid -> {...}) }
+  const byGame = new Map(); // event id -> { game, rows: Map(leagueName -> {leagueName, mine, theirs}) }
   for (const g of schedule.games) {
     if (g.state === 'post') continue;
-    byGame.set(g.id, { game: g, mine: new Map(), theirs: new Map() });
+    byGame.set(g.id, { game: g, rows: new Map() });
   }
 
   for (const { league, myRoster, matchup } of leagueData) {
@@ -928,13 +928,13 @@ function renderViewing(leagueData, playersById, week, isRegularSeason, schedule,
     }
   }
 
-  const gamesWithPlayers = [...byGame.values()].filter((b) => b.mine.size > 0 || b.theirs.size > 0);
+  const gamesWithPlayers = [...byGame.values()].filter((b) => b.rows.size > 0);
 
   if (!gamesWithPlayers.length) {
     container.innerHTML = `<div class="empty-state">None of your or your opponents' starters are in an upcoming game this week.</div>`;
   } else {
-    for (const { game, mine, theirs } of gamesWithPlayers) {
-      container.appendChild(renderGameCard(game, mine, theirs));
+    for (const { game, rows } of gamesWithPlayers) {
+      container.appendChild(renderGameCard(game, rows));
     }
   }
 
@@ -968,8 +968,9 @@ function renderLeagueTotals(leagueData) {
 }
 
 // Walks one roster's starters and files each one (that's in an upcoming game)
-// into that game's bucket under `side` ('mine' or 'theirs'), tagged with the
-// league context needed to render its chip.
+// into that game's bucket, keyed by league so the mine/theirs sides of the
+// same league end up as the same row — aligned head-to-head — regardless of
+// how many other leagues/players are also in that game.
 function addStartersToGames(byGame, side, startingSlotTypes, starters, playersById, schedule, league, projectionsById, leagueMeta) {
   for (let i = 0; i < startingSlotTypes.length; i++) {
     const pid = starters[i];
@@ -985,15 +986,16 @@ function addStartersToGames(byGame, side, startingSlotTypes, starters, playersBy
     const projStats = projectionsById ? projectionsById[pid] : null;
     const projPts = projStats ? computeFantasyPoints(projStats, league.scoring_settings) : null;
 
-    const players = bucket[side];
-    if (!players.has(pid)) {
-      players.set(pid, { playerName: player.full_name, team: normalizeTeam(player.team), leagues: [] });
+    let row = bucket.rows.get(leagueMeta.leagueName);
+    if (!row) {
+      row = { leagueName: leagueMeta.leagueName, mine: null, theirs: null };
+      bucket.rows.set(leagueMeta.leagueName, row);
     }
-    players.get(pid).leagues.push({ ...leagueMeta, projPts });
+    row[side] = { playerName: player.full_name, team: normalizeTeam(player.team), projPts, ...leagueMeta };
   }
 }
 
-function renderGameCard(game, myPlayers, theirPlayers) {
+function renderGameCard(game, rows) {
   const card = document.createElement('section');
   card.className = 'game-card';
 
@@ -1010,54 +1012,51 @@ function renderGameCard(game, myPlayers, theirPlayers) {
 
   const columns = document.createElement('div');
   columns.className = 'game-columns';
-  columns.appendChild(renderPlayerColumn('Your players', myPlayers, 'mine'));
-  columns.appendChild(renderPlayerColumn('Opponent players', theirPlayers, 'theirs'));
+
+  const mineHeading = document.createElement('h4');
+  mineHeading.className = 'col-heading mine';
+  mineHeading.textContent = 'Your players';
+  const theirsHeading = document.createElement('h4');
+  theirsHeading.className = 'col-heading theirs';
+  theirsHeading.textContent = 'Opponent players';
+  columns.appendChild(mineHeading);
+  columns.appendChild(theirsHeading);
+
+  const sortedRows = [...rows.values()].sort((a, b) => a.leagueName.localeCompare(b.leagueName));
+  for (const row of sortedRows) {
+    columns.appendChild(renderViewingCell(row.leagueName, row.mine, 'mine'));
+    columns.appendChild(renderViewingCell(row.leagueName, row.theirs, 'theirs'));
+  }
+
   card.appendChild(columns);
 
   return card;
 }
 
-function renderPlayerColumn(title, players, side) {
-  const col = document.createElement('div');
-  col.className = `game-col ${side}`;
+function renderViewingCell(leagueName, entry, side) {
+  const cell = document.createElement('div');
+  cell.className = `game-cell ${side}`;
 
-  const heading = document.createElement('h4');
-  heading.textContent = title;
-  col.appendChild(heading);
-
-  if (!players.size) {
-    const empty = document.createElement('div');
-    empty.className = 'player-meta empty-col';
-    empty.textContent = side === 'mine' ? 'None of your starters play in this game.' : "None of their starters play in this game.";
-    col.appendChild(empty);
-    return col;
+  if (!entry) {
+    cell.className += ' empty';
+    cell.innerHTML = `<div class="league-tag">${escapeHtml(leagueName)}</div><div class="player-meta">No starter in this game.</div>`;
+    return cell;
   }
 
-  const list = document.createElement('div');
-  list.className = 'game-players';
-
-  for (const { playerName, team, leagues } of players.values()) {
-    const row = document.createElement('div');
-    row.className = 'viewing-row';
-
-    const chips = leagues.map((l) => {
-      let statusText = '';
-      let cls = '';
-      if (side === 'mine' && l.oppPoints != null) {
-        const margin = l.myPoints - l.oppPoints;
-        if (margin > 0) { statusText = `+${margin.toFixed(1)}`; cls = ' lead'; }
-        else if (margin === 0) { statusText = 'tied'; }
-        else { statusText = `need ${l.pointsNeeded.toFixed(1)}`; cls = ' trail'; }
-      }
-      const projText = l.projPts != null ? `${l.projPts.toFixed(1)}p` : '&mdash;';
-      return `<span class="league-chip${cls}"><b>${escapeHtml(l.leagueName)}</b>${statusText ? ` &middot; ${statusText}` : ''} &middot; ${projText}</span>`;
-    }).join('');
-
-    row.innerHTML = `<span class="viewing-player-name">${escapeHtml(playerName)} <span class="player-meta">${escapeHtml(team)}</span></span><span class="viewing-chips">${chips}</span>`;
-    list.appendChild(row);
+  let statusText = '';
+  let cls = '';
+  if (side === 'mine' && entry.oppPoints != null) {
+    const margin = entry.myPoints - entry.oppPoints;
+    if (margin > 0) { statusText = `+${margin.toFixed(1)}`; cls = ' lead'; }
+    else if (margin === 0) { statusText = 'tied'; }
+    else { statusText = `need ${entry.pointsNeeded.toFixed(1)}`; cls = ' trail'; }
   }
+  const projText = entry.projPts != null ? `${entry.projPts.toFixed(1)}p` : '&mdash;';
 
-  col.appendChild(list);
-
-  return col;
+  cell.innerHTML = `
+    <div class="league-tag">${escapeHtml(leagueName)}</div>
+    <div class="viewing-player-name">${escapeHtml(entry.playerName)} <span class="player-meta">${escapeHtml(entry.team)}</span></div>
+    <span class="league-chip${cls}">${statusText ? `${statusText} &middot; ` : ''}${projText}</span>
+  `;
+  return cell;
 }
