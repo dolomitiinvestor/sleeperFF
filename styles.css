@@ -599,7 +599,7 @@ main {
 
 .col-heading {
   margin: 0;
-  padding: 6px 8px 2px;
+  padding: 4px 6px 2px;
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -612,7 +612,8 @@ main {
 
 .game-cell {
   min-width: 0;
-  padding: 6px 8px;
+  padding: 4px 6px;
+  line-height: 1.3;
   border-top: 1px solid var(--border);
   font-size: 0.78rem;
 }
@@ -624,6 +625,26 @@ main {
 .game-cell.empty {
   color: var(--text-muted);
   font-size: 0.72rem;
+}
+
+.game-cell.empty .player-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Line 1 of a viewing cell: league name (truncates) + score chip on the
+   right, so each cell stays at two lines even on narrow phones. */
+.cell-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cell-top .league-tag {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .league-tag {
@@ -644,8 +665,10 @@ main {
 }
 
 .game-cell .league-chip {
-  display: inline-block;
-  margin-top: 3px;
+  flex: 0 0 auto;
+  font-size: 0.62rem;
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 .league-chip {
