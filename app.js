@@ -1039,7 +1039,6 @@ function renderViewingCell(leagueName, entry, side) {
 
   if (!entry) {
     cell.className += ' empty';
-    cell.innerHTML = `<div class="league-tag">${escapeHtml(leagueName)}</div><div class="player-meta">No starter in this game.</div>`;
     return cell;
   }
 
