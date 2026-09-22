@@ -1054,9 +1054,11 @@ function renderViewingCell(leagueName, entry, side) {
   const projText = entry.projPts != null ? `${entry.projPts.toFixed(1)}p` : '&mdash;';
 
   cell.innerHTML = `
-    <div class="league-tag">${escapeHtml(leagueName)}</div>
+    <div class="cell-top">
+      <span class="league-tag">${escapeHtml(leagueName)}</span>
+      <span class="league-chip${cls}">${statusText ? `${statusText} &middot; ` : ''}${projText}</span>
+    </div>
     <div class="viewing-player-name">${escapeHtml(entry.playerName)} <span class="player-meta">${escapeHtml(entry.team)}</span></div>
-    <span class="league-chip${cls}">${statusText ? `${statusText} &middot; ` : ''}${projText}</span>
   `;
   return cell;
 }
