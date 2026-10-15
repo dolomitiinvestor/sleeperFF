@@ -12,6 +12,11 @@ grouped so you can see which games have your starters in them, how many
 points you need from that league's matchup to win, and each player's
 projected points.
 
+And a **Subs** tab: per league, the start/sit swaps that raise your
+projected total. Each player's score is their Sleeper projection scaled by
+the Vegas line — team implied total (over/under ÷ 2 − spread ÷ 2) vs. this
+week's average team. Defenses use the opponent's implied total instead.
+
 It's 100% static — no server, no login, no build step. It talks directly to
 Sleeper's public read-only API and ESPN's public scoreboard from your browser.
 Nothing you enter is sent anywhere except those two APIs, and the only thing
@@ -73,6 +78,11 @@ push. Nothing else needs to change.
   unofficial but public Sleeper endpoint. Raw per-stat projections are
   combined with each league's own `scoring_settings` so the number reflects
   that league's exact scoring, not a generic PPR/standard guess.
+- **Subs tab scoring**: `score = projection × (1 + 0.5 × (implied − avg) / avg)`,
+  capped at ±15%. Example: avg 22.5, team implied 27.0 → +10%. Lines come
+  from the `odds` block on ESPN's scoreboard. Swaps under 0.5 pts are
+  ignored. Bench players who are on bye, Out/IR/Doubtful, or already
+  kicked off are never suggested, and locked starters are never moved.
 - **Matchup score / points needed** (Viewing tab): Sleeper's
   `/league/{id}/matchups/{week}` endpoint, which is the same live score
   Sleeper's own site shows.
