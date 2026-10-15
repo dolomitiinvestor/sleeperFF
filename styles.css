@@ -432,6 +432,8 @@ main {
 .alert.sev-mid { background: var(--orange-bg); border: 1px solid var(--orange); }
 .alert.sev-low { background: var(--yellow-bg); border: 1px solid var(--yellow); }
 .alert.sev-grey { background: var(--grey-bg); border: 1px solid var(--grey); }
+.alert.sev-good { background: var(--green-bg); border: 1px solid var(--green); }
+.alert b.inline { display: inline; margin: 0; }
 
 .alert b { display: block; margin-bottom: 2px; }
 
@@ -729,6 +731,45 @@ main {
   color: var(--text);
   font-weight: 600;
 }
+
+/* ---------- Subs tab ---------- */
+
+.subs-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  align-items: start;
+  gap: 10px;
+}
+
+@media (max-width: 700px) {
+  .subs-container { grid-template-columns: 1fr; }
+}
+
+.subs-intro {
+  grid-column: 1 / -1;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.subs-total {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--green);
+  text-align: right;
+}
+
+.subs-score {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.subs-adj {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.vegas-up { color: var(--green); }
+.vegas-down { color: var(--red); }
 
 .app-footer {
   text-align: center;

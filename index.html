@@ -15,7 +15,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/icon-192.png" />
 
-<link rel="stylesheet" href="styles.css?v=10" />
+<link rel="stylesheet" href="styles.css?v=11" />
 </head>
 <body>
 <header class="app-header">
@@ -42,6 +42,7 @@
 <nav id="tab-nav" class="tab-nav" hidden>
   <button type="button" class="tab-btn active" data-tab="leagues-tab">Leagues</button>
   <button type="button" class="tab-btn" data-tab="viewing-tab">Viewing</button>
+  <button type="button" class="tab-btn" data-tab="subs-tab">Subs</button>
 </nav>
 
 <main id="app-main">
@@ -60,6 +61,10 @@
   <div id="viewing-tab" class="tab-panel" hidden>
     <div id="viewing-container" class="viewing-container"></div>
   </div>
+
+  <div id="subs-tab" class="tab-panel" hidden>
+    <div id="subs-container" class="subs-container"></div>
+  </div>
 </main>
 
 <footer class="app-footer">
@@ -68,6 +73,6 @@
 </footer>
 
 <script src="byeWeeks.js?v=1"></script>
-<script src="app.js?v=9"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>

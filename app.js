@@ -55,6 +55,8 @@ const els = {
   leaguesTab: document.getElementById('leagues-tab'),
   viewingTab: document.getElementById('viewing-tab'),
   viewingContainer: document.getElementById('viewing-container'),
+  subsTab: document.getElementById('subs-tab'),
+  subsContainer: document.getElementById('subs-container'),
 };
 
 // ---------- Tabs ----------
@@ -65,6 +67,7 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
     const target = btn.dataset.tab;
     els.leaguesTab.hidden = target !== 'leagues-tab';
     els.viewingTab.hidden = target !== 'viewing-tab';
+    els.subsTab.hidden = target !== 'subs-tab';
   });
 });
 
@@ -186,6 +189,7 @@ async function run(username, opts = {}) {
     renderSeasonBanner(state, isRegularSeason);
     renderLeagues(leagueData, playersById, week, isRegularSeason, schedule, projectionsById);
     renderViewing(leagueData, playersById, week, isRegularSeason, schedule, projectionsById);
+    renderSubs(leagueData, playersById, week, isRegularSeason, schedule, projectionsById);
     els.tabNav.hidden = false;
 
     const loadedCount = leagueData.filter(l => l.myRoster).length;
@@ -301,11 +305,15 @@ async function getWeekSchedule(season, week) {
         : null;
       const home = competitors.find((c) => c.homeAway === 'home');
       const away = competitors.find((c) => c.homeAway === 'away');
+      const lines = home && away
+        ? parseGameLines(comp, normalizeTeam(home.team && home.team.abbreviation), normalizeTeam(away.team && away.team.abbreviation))
+        : null;
 
       for (const c of competitors) {
         const abbr = c.team && c.team.abbreviation;
         if (!abbr) continue;
         const opponent = competitors.find((o) => o !== c);
+        const isHome = c.homeAway === 'home';
         schedule.set(normalizeTeam(abbr), {
           ...meta,
           opponent: opponent && opponent.team ? normalizeTeam(opponent.team.abbreviation) : null,
@@ -314,6 +322,13 @@ async function getWeekSchedule(season, week) {
           state,
           eventId: event.id,
           kickoff: event.date,
+          lines: lines ? {
+            overUnder: lines.overUnder,
+            // Negative = this team is favored (e.g. -3.5).
+            spread: isHome ? lines.homeSpread : -lines.homeSpread,
+            impliedTotal: isHome ? lines.homeImplied : lines.awayImplied,
+            oppImpliedTotal: isHome ? lines.awayImplied : lines.homeImplied,
+          } : null,
         });
       }
 
@@ -340,6 +355,45 @@ async function getWeekSchedule(season, week) {
   games.sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
   schedule.games = games;
   return schedule;
+}
+
+// Pulls the betting line (spread + over/under) from ESPN's odds block and
+// turns it into each team's Vegas implied points: total/2 minus half the
+// spread. ESPN's `details` reads like "KC -3.5" or "EVEN"; the favorite
+// flags and the signed `spread` (home-team view) are fallbacks.
+function parseGameLines(comp, homeAbbr, awayAbbr) {
+  const o = (comp.odds || [])[0];
+  if (!o) return null;
+  const overUnder = Number(o.overUnder);
+  if (!Number.isFinite(overUnder) || overUnder <= 0) return null;
+
+  const details = String(o.details || '').trim();
+  let homeSpread = null;
+  if (/^even$/i.test(details) || /^pk$/i.test(details)) {
+    homeSpread = 0;
+  } else {
+    const m = details.match(/^([A-Za-z]+)\s*([-+]?\d+(?:\.\d+)?)$/);
+    if (m) {
+      const favAbbr = normalizeTeam(m[1]);
+      const abs = Math.abs(Number(m[2]));
+      if (favAbbr === homeAbbr) homeSpread = -abs;
+      else if (favAbbr === awayAbbr) homeSpread = abs;
+    }
+  }
+  if (homeSpread == null && Number.isFinite(Number(o.spread))) {
+    const abs = Math.abs(Number(o.spread));
+    if (o.homeTeamOdds && o.homeTeamOdds.favorite) homeSpread = -abs;
+    else if (o.awayTeamOdds && o.awayTeamOdds.favorite) homeSpread = abs;
+    else homeSpread = Number(o.spread);
+  }
+  if (homeSpread == null) homeSpread = 0;
+
+  return {
+    overUnder,
+    homeSpread,
+    homeImplied: overUnder / 2 - homeSpread / 2,
+    awayImplied: overUnder / 2 + homeSpread / 2,
+  };
 }
 
 function isThursdayTeam(schedule, team) {
@@ -1060,4 +1114,252 @@ function renderViewingCell(leagueName, entry, side) {
     <div class="viewing-player-name">${escapeHtml(entry.playerName)} <span class="player-meta">${escapeHtml(entry.team)}</span></div>
   `;
   return cell;
+}
+
+// ---------- Subs tab: start/sit swaps ranked by Sleeper projection, nudged
+// by the Vegas implied team total. ----------
+//
+// Sleeper's projection is the base. The betting line then scales it: a
+// player whose team is implied for more points than this week's average
+// team gets a bump, a lower total gets a cut. Defenses use the opposing
+// team's implied total instead (fewer points allowed = better D/ST).
+// VEGAS_WEIGHT = 0.5 means a team implied 20% above average adds 10% to
+// the projection; the adjustment is capped at +/-15%.
+const VEGAS_WEIGHT = 0.5;
+const VEGAS_MAX_ADJ = 0.15;
+const DEFAULT_IMPLIED_TOTAL = 22.5;
+// Ignore swaps worth less than this — inside projection noise.
+const MIN_SWAP_GAIN = 0.5;
+
+function averageImpliedTotal(schedule) {
+  let sum = 0;
+  let n = 0;
+  if (schedule) {
+    for (const g of schedule.values()) {
+      if (g.lines && Number.isFinite(g.lines.impliedTotal)) {
+        sum += g.lines.impliedTotal;
+        n++;
+      }
+    }
+  }
+  return n ? sum / n : DEFAULT_IMPLIED_TOTAL;
+}
+
+function vegasFactor(player, game, avgImplied) {
+  if (!game || !game.lines || !avgImplied) return 1;
+  const isDef = player.position === 'DEF';
+  const implied = isDef ? game.lines.oppImpliedTotal : game.lines.impliedTotal;
+  if (!Number.isFinite(implied)) return 1;
+  const rel = isDef ? (avgImplied - implied) / avgImplied : (implied - avgImplied) / avgImplied;
+  const adj = Math.max(-VEGAS_MAX_ADJ, Math.min(VEGAS_MAX_ADJ, VEGAS_WEIGHT * rel));
+  return 1 + adj;
+}
+
+// Scores one player for this week. `available` is false when they can't
+// help you (bye, Out/IR-type designation, no game found), which zeroes
+// their value; `locked` means their game has kicked off.
+function scorePlayer(pid, league, playersById, week, schedule, projectionsById, avgImplied) {
+  const player = playersById[pid];
+  if (!player) return null;
+  const bye = getByeWeek(player.team);
+  const onBye = !!(bye && bye === week);
+  const game = !onBye && schedule ? schedule.get(normalizeTeam(player.team)) : null;
+  const proj = projectedPoints(pid, league, projectionsById);
+  const injuredOut = BAD_INJURY_STATUSES.has(player.injury_status);
+  const available = !onBye && !injuredOut && !!player.team && (!schedule || !!game);
+  const factor = vegasFactor(player, game, avgImplied);
+  const adj = available && proj != null ? proj * factor : 0;
+  return {
+    pid,
+    player,
+    game,
+    onBye,
+    proj,
+    factor,
+    adj,
+    available,
+    locked: gameHasStarted(schedule, player.team),
+  };
+}
+
+// Greedy lineup fix: repeatedly make the single swap with the biggest gain
+// (a bench player into a starting slot they're eligible for), until no swap
+// beats MIN_SWAP_GAIN. Benched starters go back into the pool, so chains
+// like "RB2 moves to FLEX, bench RB takes RB2" fall out naturally.
+function recommendSubs(league, roster, playersById, week, schedule, projectionsById, avgImplied) {
+  const slots = (league.roster_positions || []).filter((p) => p !== 'BN');
+  const starters = roster.starters || [];
+  const reserve = new Set(roster.reserve || []);
+  const taxi = new Set(roster.taxi || []);
+  const benchIds = (roster.players || []).filter((id) => !starters.includes(id) && !reserve.has(id) && !taxi.has(id));
+  const score = (pid) => (pid && pid !== '0' ? scorePlayer(pid, league, playersById, week, schedule, projectionsById, avgImplied) : null);
+
+  const original = slots.map((slot, i) => ({ slot, cur: score(starters[i]) }));
+  const lineup = original.map((o) => ({ slot: o.slot, cur: o.cur }));
+  let bench = benchIds.map(score).filter(Boolean);
+
+  const eligible = (s, slot) => {
+    const positions = FLEX_ELIGIBILITY[slot] || [slot];
+    return (s.player.fantasy_positions || [s.player.position]).some((pos) => positions.includes(pos));
+  };
+
+  for (let guard = 0; guard < 20; guard++) {
+    let best = null;
+    lineup.forEach((entry, i) => {
+      if (entry.cur && entry.cur.locked) return; // slot already locked in
+      const curAdj = entry.cur ? entry.cur.adj : 0;
+      for (const cand of bench) {
+        if (!cand.available || cand.locked || cand.proj == null) continue;
+        if (!eligible(cand, entry.slot)) continue;
+        const gain = cand.adj - curAdj;
+        if (gain >= MIN_SWAP_GAIN && (!best || gain > best.gain)) best = { i, cand, gain };
+      }
+    });
+    if (!best) break;
+    const out = lineup[best.i].cur;
+    lineup[best.i] = { slot: lineup[best.i].slot, cur: best.cand };
+    bench = bench.filter((b) => b !== best.cand);
+    if (out) bench.push(out);
+  }
+
+  const swaps = [];
+  lineup.forEach((entry, i) => {
+    const before = original[i].cur;
+    if (entry.cur && (!before || entry.cur.pid !== before.pid)) {
+      swaps.push({ slot: entry.slot, inn: entry.cur, out: before, gain: entry.cur.adj - (before ? before.adj : 0) });
+    }
+  });
+  const totalBefore = original.reduce((t, o) => t + (o.cur ? o.cur.adj : 0), 0);
+  const totalAfter = lineup.reduce((t, o) => t + (o.cur ? o.cur.adj : 0), 0);
+
+  return { original, swaps, totalBefore, totalAfter, bench: benchIds.map(score).filter(Boolean) };
+}
+
+function renderSubs(leagueData, playersById, week, isRegularSeason, schedule, projectionsById) {
+  const container = els.subsContainer;
+  container.innerHTML = '';
+
+  if (!isRegularSeason) {
+    container.innerHTML = `<div class="empty-state">Sub recommendations turn on once the regular season starts.</div>`;
+    return;
+  }
+  if (!projectionsById) {
+    container.innerHTML = `<div class="empty-state">Couldn't load Sleeper projections right now, so there's nothing to rank subs on.</div>`;
+    return;
+  }
+
+  const avgImplied = averageImpliedTotal(schedule);
+  const hasLines = !!schedule && [...schedule.values()].some((g) => g.lines);
+
+  const intro = document.createElement('div');
+  intro.className = 'subs-intro';
+  intro.textContent = hasLines
+    ? `Score = Sleeper projection × Vegas factor. Avg team implied total this week: ${avgImplied.toFixed(1)} pts. Factor is capped at ±${Math.round(VEGAS_MAX_ADJ * 100)}%.`
+    : `No betting lines available yet — ranking on Sleeper projections only.`;
+  container.appendChild(intro);
+
+  for (const { league, users, myRoster } of leagueData) {
+    if (!myRoster) continue;
+    const owner = users.find((u) => u.user_id === myRoster.owner_id);
+    const teamName = (myRoster.metadata && myRoster.metadata.team_name) || (owner && (owner.metadata && owner.metadata.team_name)) || (owner && owner.display_name) || 'My Team';
+    const rec = recommendSubs(league, myRoster, playersById, week, schedule, projectionsById, avgImplied);
+
+    const card = document.createElement('section');
+    card.className = 'league-card subs-card';
+    const delta = rec.totalAfter - rec.totalBefore;
+    card.innerHTML = `
+      <div class="league-card-header">
+        <div class="league-title">
+          <h2>${escapeHtml(league.name)}</h2>
+          <div class="sub">${escapeHtml(teamName)}</div>
+        </div>
+        <div class="record-pill">${rec.totalBefore.toFixed(1)}${rec.swaps.length ? ` → ${rec.totalAfter.toFixed(1)}` : ''}</div>
+      </div>
+    `;
+
+    const alerts = document.createElement('div');
+    if (!rec.swaps.length) {
+      alerts.className = 'no-alerts';
+      alerts.textContent = 'Lineup is already optimal on projections + Vegas lines.';
+    } else {
+      alerts.className = 'alerts';
+      const sorted = [...rec.swaps].sort((a, b) => b.gain - a.gain);
+      for (const sw of sorted) {
+        const row = document.createElement('div');
+        row.className = 'alert sev-good';
+        const outText = sw.out
+          ? `over <b class="inline">${escapeHtml(sw.out.player.full_name)}</b> (${subScoreText(sw.out)})`
+          : 'into the empty slot';
+        row.innerHTML = `<div>${escapeHtml(sw.slot)}: start <b class="inline">${escapeHtml(sw.inn.player.full_name)}</b> (${subScoreText(sw.inn)}) ${outText} — <b class="inline">+${sw.gain.toFixed(1)}</b></div>`;
+        alerts.appendChild(row);
+      }
+      const total = document.createElement('div');
+      total.className = 'subs-total';
+      total.textContent = `Net gain: +${delta.toFixed(1)} pts`;
+      alerts.appendChild(total);
+    }
+    card.appendChild(alerts);
+
+    const section = document.createElement('div');
+    section.className = 'roster-section';
+    section.appendChild(sectionHeading('Starters'));
+    for (const o of rec.original) section.appendChild(subsRow(o.slot, o.cur));
+    const benchSorted = rec.bench.filter((b) => b.available).sort((a, b) => b.adj - a.adj);
+    if (benchSorted.length) {
+      section.appendChild(sectionHeading('Bench'));
+      for (const b of benchSorted) section.appendChild(subsRow('BN', b));
+    }
+    card.appendChild(section);
+    container.appendChild(card);
+  }
+}
+
+function subScoreText(s) {
+  if (!s.available) return s.onBye ? 'BYE' : escapeHtml(s.player.injury_status || 'out');
+  if (s.proj == null) return 'no proj';
+  return `${s.adj.toFixed(1)}`;
+}
+
+function linesText(s) {
+  const l = s.game && s.game.lines;
+  if (!l) return '';
+  const spread = l.spread === 0 ? 'PK' : `${l.spread > 0 ? '+' : ''}${l.spread}`;
+  const implied = s.player.position === 'DEF' ? `opp ${l.oppImpliedTotal.toFixed(1)}` : `${l.impliedTotal.toFixed(1)}`;
+  return `${spread} · O/U ${l.overUnder} · imp ${implied}`;
+}
+
+function subsRow(slot, s) {
+  const row = document.createElement('div');
+  row.className = 'player-row';
+  if (!s) {
+    row.innerHTML = `<span class="slot-tag">${escapeHtml(slot)}</span><span class="player-name player-meta">Empty</span>`;
+    return row;
+  }
+  const p = s.player;
+  const sev = injurySeverity(p.injury_status);
+  let badges = '';
+  if (s.onBye) badges += `<span class="badge bye">BYE</span>`;
+  if (sev === 'low') badges += `<span class="badge badge-yellow">Q</span>`;
+  else if (sev === 'mid') badges += `<span class="badge badge-orange">${escapeHtml(p.injury_status)}</span>`;
+  else if (sev === 'high') badges += `<span class="badge badge-red">${escapeHtml(p.injury_status)}</span>`;
+  if (s.locked) badges += `<span class="badge game grey">Locked</span>`;
+  const lt = linesText(s);
+  if (lt) badges += `<span class="badge game">${escapeHtml(lt)}</span>`;
+
+  const projText = s.proj != null ? s.proj.toFixed(1) : '—';
+  const pct = Math.round((s.factor - 1) * 100);
+  const factorText = s.available && s.proj != null && pct !== 0 ? ` <span class="${pct > 0 ? 'vegas-up' : 'vegas-down'}">${pct > 0 ? '+' : ''}${pct}%</span>` : '';
+
+  row.innerHTML = `
+    <span class="slot-tag">${escapeHtml(slot)}</span>
+    <div class="player-info">
+      <div class="player-name-line">${escapeHtml(p.full_name)} <span class="player-meta">${escapeHtml(p.position || '')}${p.team ? ' · ' + escapeHtml(p.team) : ' · FA'}</span></div>
+      <div class="player-badges-line">${badges}</div>
+    </div>
+    <div class="subs-score">
+      <div class="subs-adj">${s.available && s.proj != null ? s.adj.toFixed(1) : '0.0'}</div>
+      <div class="player-meta">proj ${projText}${factorText}</div>
+    </div>
+  `;
+  return row;
 }
