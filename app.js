@@ -1232,7 +1232,11 @@ function recommendSubs(league, roster, playersById, week, schedule, projectionsB
   const totalBefore = original.reduce((t, o) => t + (o.cur ? o.cur.adj : 0), 0);
   const totalAfter = lineup.reduce((t, o) => t + (o.cur ? o.cur.adj : 0), 0);
 
-  return { original, swaps, totalBefore, totalAfter, bench: benchIds.map(score).filter(Boolean) };
+  // Full recommended starters array (same slot order as Sleeper's), used by
+  // the autosub bot to submit the lineup.
+  const finalStarters = lineup.map((o, i) => (o.cur ? o.cur.pid : (starters[i] || '0')));
+
+  return { original, swaps, totalBefore, totalAfter, finalStarters, bench: benchIds.map(score).filter(Boolean) };
 }
 
 function renderSubs(leagueData, playersById, week, isRegularSeason, schedule, projectionsById) {
