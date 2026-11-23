@@ -1,0 +1,41 @@
+name: Sleeper autosub
+
+# Hourly from Thursday through Tuesday morning UTC (covers Thu/Sat/Sun/Mon
+# games, incl. international early kickoffs). Each run only moves players
+# whose games haven't started, so late runs pick up inactives/news.
+# GitHub cron can lag 5-15 minutes; hourly runs absorb that.
+on:
+  schedule:
+    - cron: '20 * * * 0,1,2,4,5,6'
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Submit lineups (otherwise dry run)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: sleeper-autosub
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  autosub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Set lineups
+        env:
+          SLEEPER_USERNAME: ${{ secrets.SLEEPER_USERNAME }}
+          SLEEPER_TOKEN: ${{ secrets.SLEEPER_TOKEN }}
+          AUTOSUB_LEAGUES: ${{ vars.AUTOSUB_LEAGUES }}
+          # Scheduled runs submit only when repo variable AUTOSUB_LIVE=true.
+          # Manual runs submit only when the "live" box is ticked.
+          AUTOSUB_LIVE: ${{ github.event_name == 'workflow_dispatch' && inputs.live || (github.event_name == 'schedule' && vars.AUTOSUB_LIVE) }}
+        run: node autosub/autosub.mjs
